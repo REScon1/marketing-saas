@@ -6,3 +6,5 @@ export * from './policy.js';
 export * from './assistant.js';
 export * from './publisher.js';
 export * from './services.js';
+export * from './rpc.js';
+export * from './seed.js';

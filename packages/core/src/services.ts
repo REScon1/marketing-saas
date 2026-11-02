@@ -905,6 +905,9 @@ export function createServices(deps: Deps) {
     get isAi() {
       return deps.assistant.isAi;
     },
+    async info(_actor: Actor) {
+      return { label: deps.assistant.label, isAi: deps.assistant.isAi, publisher: deps.publisher.label };
+    },
     async draft(actor: Actor, input: { brandId: Id; brief: string; networks: Network[]; language?: Language; variants?: number }) {
       assertStaff(actor);
       const brand = await loadBrand(store, actor, input.brandId);
