@@ -146,8 +146,8 @@ export async function seedDemo(s: Services, clock: SeedClock, today: Date = new 
   // Schváleno a naplánováno
   clock.set(at(-2, 11));
   const sch = await s.content.createPost(manager, {
-    brandId: fit.id, title: 'Silvestrovský běh', networks: ['facebook', 'instagram'], aiAssisted: true,
-    body: 'Rozlučme se s rokem pohybem! 31. 12. v 10:00 startujeme silvestrovský běh z Lužánek. 5 km, kostýmy vítány. 🎉🏃\n\n#fitzonabrno #brno #beh',
+    brandId: fit.id, title: 'Večerní běh s čelovkami', networks: ['facebook', 'instagram'], aiAssisted: true,
+    body: 'Tma nás nezastaví! Ve středu v 19:00 vybíháme z Lužánek na večerní běh s čelovkami. 5 km, tempo pro všechny, čelovky půjčíme. 🔦🏃\n\n#fitzonabrno #brno #beh',
   });
   await s.content.submitForApproval(manager, sch.id);
   await s.content.decide(clients.fit, sch.id, 'approved');

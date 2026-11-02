@@ -87,13 +87,13 @@ export class SimulatedMetrics implements MetricsProvider {
     const days = Math.max(0, (Date.parse(input.now) - Date.parse(input.publishedAt)) / 864e5);
     const growth = Math.min(1, 0.35 + days / 7);
     const reach = Math.round(base * (0.5 + (h % 1000) / 1000) * growth);
-    const rate = { facebook: 0.035, instagram: 0.055, linkedin: 0.045 }[input.network] * (0.6 + ((h >> 10) % 100) / 100);
+    const rate = { facebook: 0.035, instagram: 0.055, linkedin: 0.045 }[input.network] * (0.6 + ((h >>> 10) % 100) / 100);
     const engagements = Math.round(reach * rate);
     return {
       reach,
-      impressions: Math.round(reach * (1.25 + ((h >> 4) % 50) / 100)),
+      impressions: Math.round(reach * (1.25 + ((h >>> 4) % 50) / 100)),
       engagements,
-      clicks: Math.round(engagements * (0.2 + ((h >> 16) % 30) / 100)),
+      clicks: Math.round(engagements * (0.2 + ((h >>> 16) % 30) / 100)),
     };
   }
 }
