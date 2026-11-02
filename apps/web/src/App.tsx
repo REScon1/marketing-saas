@@ -192,6 +192,7 @@ function Shell() {
   const staff = isStaffRole(actor.role);
   const theme = useTheme();
   const nav = useNavigate();
+  const [confirmReset, setConfirmReset] = useState(false);
   const loc = useLocation();
   const pending = useData(() => s.backend.call('content.pendingApprovals'), []);
   const pendingCount = pending.data?.length ?? 0;
@@ -244,16 +245,15 @@ function Shell() {
         {s.demo && (
           <div className="demo-banner no-print">
             <span>Demo: data jsou smyšlená a uložená jen ve vašem prohlížeči. AI texty generuje šablona, publikace je simulovaná.</span>
-            <button
-              onClick={async () => {
-                if (!confirm('Smazat vaše změny a obnovit ukázková data?')) return;
-                await s.demo!.reset();
-                nav('/');
-                s.logout();
-              }}
-            >
-              Obnovit ukázková data
-            </button>
+            {confirmReset ? (
+              <>
+                <span>Smazat vaše změny?</span>
+                <button onClick={async () => { await s.demo!.reset(); nav('/'); s.logout(); }}>Ano, obnovit</button>
+                <button onClick={() => setConfirmReset(false)}>Ne</button>
+              </>
+            ) : (
+              <button onClick={() => setConfirmReset(true)}>Obnovit ukázková data</button>
+            )}
           </div>
         )}
         <header className="topbar no-print">

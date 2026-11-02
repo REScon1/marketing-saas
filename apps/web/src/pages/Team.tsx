@@ -13,6 +13,7 @@ export function Team() {
   const members = useData(() => api.call('tenancy.listMembers'), []);
   const { run, busy } = useAction();
   const [open, setOpen] = useState(false);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
   if (!members.data) return <Loading />;
   return (
     <>
@@ -28,9 +29,15 @@ export function Team() {
                 <td className="small">{m.role === 'client' ? `jen ${clientById.get(m.clientId ?? '')?.name ?? 'klient'}` : 'všichni klienti'}</td>
                 <td className="small muted">{fmtDate(m.createdAt)}</td>
                 <td style={{ textAlign: 'right' }}>
-                  {m.userId !== actor.userId && (
-                    <button className="btn sm danger" disabled={busy} onClick={() => confirm(`Odebrat ${m.user.name}? Přístup skončí okamžitě.`) && void run(() => api.call('tenancy.removeMember', m.id), 'Přístup odebrán')}>Odebrat</button>
-                  )}
+                  {m.userId !== actor.userId && (confirmId === m.id ? (
+                    <span className="row" style={{ justifyContent: 'flex-end' }}>
+                      <span className="small muted">Přístup skončí okamžitě.</span>
+                      <button className="btn sm danger" disabled={busy} onClick={() => void run(() => api.call('tenancy.removeMember', m.id), 'Přístup odebrán')}>Odebrat</button>
+                      <button className="btn sm" onClick={() => setConfirmId(null)}>Zrušit</button>
+                    </span>
+                  ) : (
+                    <button className="btn sm danger" onClick={() => setConfirmId(m.id)}>Odebrat</button>
+                  ))}
                 </td>
               </tr>
             ))}

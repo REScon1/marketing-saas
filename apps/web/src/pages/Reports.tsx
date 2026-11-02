@@ -17,7 +17,7 @@ function monthOptions(n = 6) {
 
 export function Reports() {
   const api = useApi();
-  const { agencyName } = useSession();
+  const { agencyName, demo } = useSession();
   const { brands } = useCatalog();
   const months = useMemo(() => monthOptions(), []);
   const [brandId, setBrandId] = useState('');
@@ -40,7 +40,7 @@ export function Reports() {
             <select className="select no-print" style={{ width: 180 }} value={month} onChange={(e) => setMonth(e.target.value)} aria-label="Měsíc">
               {months.map((m) => <option key={m.v} value={m.v}>{m.label}</option>)}
             </select>
-            <button className="btn no-print" onClick={() => window.print()}><Printer size={15} /> Tisk / PDF</button>
+            {!demo && <button className="btn no-print" onClick={() => window.print()}><Printer size={15} /> Tisk / PDF</button>}
           </>
         }
       />

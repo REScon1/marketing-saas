@@ -206,9 +206,16 @@ function Editor({ detail }: { detail: PostDetail | null }) {
               <h2 className="row"><Link2 size={16} /> Odkaz pro klienta</h2>
               <p className="small muted">Klient může schválit i bez účtu. Odkaz platí do {fmtDateTime(approvalLink!.expiresAt)} a jen pro tuto verzi.</p>
               <div className="row">
-                <button className="btn sm" onClick={() => { void navigator.clipboard?.writeText(linkUrl); toast('Odkaz zkopírován'); }}><Copy size={14} /> Kopírovat</button>
-                <a className="btn sm" href={linkUrl} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Otevřít jako klient</a>
+                <button className="btn sm" onClick={() => {
+                  navigator.clipboard?.writeText(linkUrl).then(() => toast('Odkaz zkopírován'), () => toast('Kopírování nejde, označte odkaz níže a zkopírujte ho ručně', 'error'));
+                }}><Copy size={14} /> Kopírovat</button>
+                {s.demo ? (
+                  <button className="btn sm" onClick={() => nav(`/schvalit/${approvalLink!.token}`)}><ExternalLink size={14} /> Otevřít jako klient</button>
+                ) : (
+                  <a className="btn sm" href={linkUrl} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Otevřít jako klient</a>
+                )}
               </div>
+              <input className="input small" readOnly value={linkUrl} onFocus={(e) => e.currentTarget.select()} aria-label="Odkaz pro klienta" />
             </section>
           )}
 

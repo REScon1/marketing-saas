@@ -7,9 +7,10 @@
     "dev": "vite",
     "dev:demo": "vite --mode demo",
     "build": "tsc --noEmit && vite build",
-    "build:demo": "vite build --mode demo",
+    "build:demo": "vite build --mode demo && node scripts/to-artifact.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "e2e:demo": "node e2e/demo-flow.cjs"
   },
   "dependencies": {
     "@ms/core": "workspace:*",

@@ -55,6 +55,12 @@ export function PublicApproval({ backend }: { backend: Backend }) {
   const open = view.approval.status === 'pending' && view.isCurrent;
   return (
     <div className="public-wrap stack" style={{ gap: 16 }}>
+      {__DEMO__ && (
+        <div className="alert warn small">
+          Demo: takhle stránku uvidí klient po otevření odkazu, bez přihlášení.
+          <a href="#/" style={{ marginLeft: 'auto', fontWeight: 700, textDecoration: 'underline' }} onClick={(e) => { e.preventDefault(); history.back(); }}>Zpět do aplikace</a>
+        </div>
+      )}
       <div className="row">
         <span className="brand-dot" style={{ background: view.brandColor, width: 14, height: 14 }} />
         <span className="strong">{view.brandName}</span>
