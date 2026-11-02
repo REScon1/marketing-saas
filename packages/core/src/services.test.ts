@@ -270,3 +270,13 @@ describe('AI asistent', () => {
     await expect(s.ai.draft(clientActor as Actor, { brandId: brand.id, brief: 'x', networks: [] })).rejects.toMatchObject({ code: 'forbidden' });
   });
 });
+
+describe('veřejný odkaz', () => {
+  it('komentář hosta nevrací interní identifikátory', async () => {
+    const { s, owner, brand } = await setup();
+    const post = await s.content.createPost(owner, { brandId: brand.id, body: 'x', networks: ['facebook'] });
+    const { approval } = await s.content.submitForApproval(owner, post.id);
+    const c = await s.content.addCommentByToken(approval!.token, { name: 'Jana', body: 'Dobré' });
+    expect(Object.keys(c).sort()).toEqual(['authorName', 'authorRole', 'body', 'createdAt']);
+  });
+});

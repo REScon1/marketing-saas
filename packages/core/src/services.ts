@@ -608,7 +608,8 @@ export function createServices(deps: Deps) {
           body: text, postVersion: post.version, createdAt: nowIso(),
         };
         await s.comments.insert(c);
-        return c;
+        // Host přes odkaz nedostane interní identifikátory.
+        return { authorName: c.authorName, authorRole: c.authorRole, body: c.body, createdAt: c.createdAt };
       });
     },
 
