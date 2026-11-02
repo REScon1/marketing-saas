@@ -1,3 +1,4 @@
+import { useReveal } from '../lib/motion';
 import type { Role } from '@ms/core';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
@@ -14,6 +15,7 @@ export function Team() {
   const { run, busy } = useAction();
   const [open, setOpen] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  useReveal(!!members.data);
   if (!members.data) return <Loading />;
   return (
     <>

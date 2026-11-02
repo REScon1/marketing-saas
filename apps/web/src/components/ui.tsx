@@ -1,6 +1,7 @@
 import type { Network, PostStatus } from '@ms/core';
 import { Facebook, Instagram, Linkedin, X } from 'lucide-react';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
+import { useCountUp } from '../lib/motion';
 import { NETWORK_LABEL, STATUS_LABEL } from '../lib/format';
 
 export function StatusBadge({ status }: { status: PostStatus }) {
@@ -117,4 +118,11 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
       {hint && <span className="hint">{hint}</span>}
     </label>
   );
+}
+
+/** Číslo, které naběhne od nuly (efekt z referenčních videí). */
+export function CountUp({ value, format }: { value: number | null; format: (n: number) => string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useCountUp(ref, value, format);
+  return <span ref={ref}>{value === null ? '–' : format(0)}</span>;
 }

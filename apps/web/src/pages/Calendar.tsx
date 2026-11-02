@@ -1,10 +1,12 @@
 import { NETWORKS, type Network, type Post, type PostStatus } from '@ms/core';
 import { CalendarCheck2, CalendarX2, ChevronLeft, ChevronRight, Clock4, GripVertical, Hourglass, Plus, Send } from 'lucide-react';
-import { useMemo, useState, type DragEvent } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { Flip, gsap, reduced, useReveal } from '../lib/motion';
+import { CountUp } from '../components/ui';
 import { useNavigate } from 'react-router-dom';
 import { Empty, Loading, NetworkIcon, StatusBadge } from '../components/ui';
 import { isStaffRole, useAction, useApi, useBrandFilter, useData, useSession } from '../lib/app';
-import { fmtTime, fromLocalInput, NETWORK_LABEL, pragueDay, STATUS_LABEL, toLocalInput } from '../lib/format';
+import { fmtInt, fmtTime, fromLocalInput, NETWORK_LABEL, pragueDay, STATUS_LABEL, toLocalInput } from '../lib/format';
 import { useCatalog } from '../lib/hooks';
 import { Stat, Thumb } from './Dashboard';
 
@@ -40,6 +42,32 @@ export function CalendarPage() {
 
   const posts = useData(() => api.call('content.listPosts', brandId ? { brandId } : {}), [brandId]);
   const ov = useData(() => api.call('reports.overview', brandId ? { brandId } : {}), [brandId]);
+  useReveal(!!posts.data);
+
+  // Přepnutí Týden / Měsíc / Seznam: bloky se přelijí na nové místo (Flip), nové naběhnou, staré zmizí.
+  const flipState = useRef<ReturnType<typeof Flip.getState> | null>(null);
+  const shiftDir = useRef(0);
+  const switchView = (v: View) => {
+    if (v === view) return;
+    if (!reduced()) flipState.current = Flip.getState(document.querySelectorAll('.cal-layout [data-flip-id]'));
+    setView(v);
+  };
+  useLayoutEffect(() => {
+    if (!flipState.current) return;
+    Flip.from(flipState.current, {
+      duration: 0.7, ease: 'power3.inOut', absolute: true, scale: true, nested: true, stagger: 0.006,
+      onEnter: (els) => gsap.fromTo(els, { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.45, delay: 0.25, ease: 'power3.out' }),
+      onLeave: (els) => gsap.to(els, { opacity: 0, scale: 0.9, duration: 0.25 }),
+    });
+    flipState.current = null;
+  }, [view]);
+  // Změna měsíce/týdne: dny přijedou ze strany, kterou jste šli.
+  useLayoutEffect(() => {
+    const dir = shiftDir.current;
+    shiftDir.current = 0;
+    if (!dir || reduced()) return;
+    gsap.fromTo('.cal > .cal-d, .week > .cal-d', { opacity: 0, x: 24 * dir }, { opacity: 1, x: 0, duration: 0.5, stagger: 0.008, ease: 'power3.out', clearProps: 'transform,opacity' });
+  }, [anchor]);
 
   const visible = useMemo(() => {
     const allowed = new Set(GROUPS.filter((g) => groups.has(g.key)).flatMap((g) => g.statuses));
@@ -72,6 +100,7 @@ export function CalendarPage() {
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(mondayOf(anchor), i)), [anchor]);
 
   function shift(dir: number) {
+    shiftDir.current = dir;
     if (view === 'week') setAnchor(addDays(anchor, 7 * dir));
     else {
       const d = new Date(Date.UTC(y, mo + dir, 1));
@@ -112,15 +141,15 @@ export function CalendarPage() {
       <div className="page-head">
         <h1>{'Publikační\nkalendář'}</h1>
         <div className="stats">
-          <Stat icon={<CalendarCheck2 size={16} />} num={o ? String(o.scheduledThisWeek) : '–'} label="naplánováno tento týden" />
-          <Stat icon={<Hourglass size={16} />} num={o ? String(o.awaitingApproval) : '–'} label="čeká na schválení" />
-          <Stat icon={<Send size={16} />} num={o ? String(o.publishedThisWeek) : '–'} label="publikováno tento týden" />
-          <Stat icon={<CalendarX2 size={16} />} num={o ? String(o.emptyDaysNext14) : '–'} label="prázdných dní v příštích 14" />
+          <Stat icon={<CalendarCheck2 size={16} />} num={<CountUp value={o?.scheduledThisWeek ?? null} format={fmtInt} />} label="naplánováno tento týden" />
+          <Stat icon={<Hourglass size={16} />} num={<CountUp value={o?.awaitingApproval ?? null} format={fmtInt} />} label="čeká na schválení" />
+          <Stat icon={<Send size={16} />} num={<CountUp value={o?.publishedThisWeek ?? null} format={fmtInt} />} label="publikováno tento týden" />
+          <Stat icon={<CalendarX2 size={16} />} num={<CountUp value={o?.emptyDaysNext14 ?? null} format={fmtInt} />} label="prázdných dní v příštích 14" />
         </div>
         <div className="actions">
           <div className="seg" role="tablist" aria-label="Zobrazení">
             {(['week', 'month', 'list'] as View[]).map((v) => (
-              <button key={v} role="tab" aria-selected={view === v} className={view === v ? 'on' : ''} onClick={() => setView(v)}>{{ week: 'Týden', month: 'Měsíc', list: 'Seznam' }[v]}</button>
+              <button key={v} role="tab" aria-selected={view === v} className={view === v ? 'on' : ''} onClick={() => switchView(v)}>{{ week: 'Týden', month: 'Měsíc', list: 'Seznam' }[v]}</button>
             ))}
           </div>
           <button className="btn" onClick={() => shift(-1)} aria-label="Předchozí"><ChevronLeft size={16} /></button>
@@ -174,7 +203,7 @@ export function CalendarPage() {
                         {staff && day >= today && <button className="add" onClick={() => nav(`/posty/novy?den=${day}`)} aria-label={`Nový post na ${day}`}><Plus size={14} /></button>}
                       </div>
                       {items.slice(0, 3).map((p) => <Block key={p.id} post={p} staff={staff} onOpen={() => nav(`/posty/${p.id}`)} brandColor={brandById.get(p.brandId)?.profile.color} />)}
-                      {items.length > 3 && <button className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => { setAnchor(day); setView('week'); }}>+{items.length - 3} další</button>}
+                      {items.length > 3 && <button className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => { setAnchor(day); switchView('week'); }}>+{items.length - 3} další</button>}
                     </div>
                   );
                 })}
@@ -215,7 +244,7 @@ export function CalendarPage() {
                 {WEEKDAYS.map((d) => <span key={d} className="h">{d}</span>)}
                 {monthDays.map((day) => (
                   <button key={day} className={`${Number(day.slice(5, 7)) - 1 !== mo ? 'out' : ''} ${day === today ? 'today' : ''} ${byDay.has(day) ? 'has' : ''}`}
-                    onClick={() => { setAnchor(day); setView('week'); }} aria-label={`Týden s ${day}`}>
+                    onClick={() => { setAnchor(day); switchView('week'); }} aria-label={`Týden s ${day}`}>
                     {Number(day.slice(8))}
                   </button>
                 ))}
@@ -258,7 +287,7 @@ function Block({ post: p, staff, big, onOpen, brandColor }: { post: Post; staff:
   const draggable = staff && !['published', 'publishing'].includes(p.status);
   const at = p.publishedAt ?? p.scheduledAt!;
   return (
-    <div className={`block b-${p.status} ${big ? 'big' : ''}`} draggable={draggable} role="link" tabIndex={0}
+    <div className={`block b-${p.status} ${big ? 'big' : ''}`} data-flip-id={p.id} draggable={draggable} role="link" tabIndex={0}
       onDragStart={(e) => { e.dataTransfer.setData('text/plain', p.id); e.dataTransfer.effectAllowed = 'move'; }}
       onClick={onOpen} onKeyDown={(e) => e.key === 'Enter' && onOpen()} title={`${p.title} · ${STATUS_LABEL[p.status]}`}>
       {big && p.media[0] && <img src={p.media[0].url} alt="" loading="lazy" />}
@@ -284,7 +313,7 @@ function ListView({ days, byDay, brandById }: { days: string[]; byDay: Map<strin
               {byDay.get(d)!.map((p) => (
                 <tr key={p.id} className="click" onClick={() => nav(`/posty/${p.id}`)}>
                   <td style={{ width: 70 }} className="mono small">{fmtTime(p.publishedAt ?? p.scheduledAt!)}</td>
-                  <td><div className="row" style={{ flexWrap: 'nowrap' }}><Thumb post={p} brand={brandById.get(p.brandId)} /><span style={{ minWidth: 0 }}><span className="strong clamp1" style={{ display: 'block' }}>{p.title}</span><span className="small muted">{brandById.get(p.brandId)?.name}</span></span></div></td>
+                  <td><div className="row" style={{ flexWrap: 'nowrap' }} data-flip-id={p.id}><Thumb post={p} brand={brandById.get(p.brandId)} /><span style={{ minWidth: 0 }}><span className="strong clamp1" style={{ display: 'block' }}>{p.title}</span><span className="small muted">{brandById.get(p.brandId)?.name}</span></span></div></td>
                   <td style={{ width: 90 }}><span className="row" style={{ gap: 4, color: 'var(--muted)' }}>{p.networks.map((n) => <NetworkIcon key={n} network={n} />)}</span></td>
                   <td style={{ width: 160 }}><StatusBadge status={p.status} /></td>
                 </tr>

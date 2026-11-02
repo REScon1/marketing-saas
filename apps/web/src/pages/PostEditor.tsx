@@ -7,7 +7,9 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useAmbient } from '../components/Ambient';
 import { PostPreview } from '../components/PostPreview';
+import { useReveal } from '../lib/motion';
 import { Avatar, BrandTag, ErrorBox, Field, Loading, Modal, NetworkIcon, StatusBadge } from '../components/ui';
 import { isStaffRole, useAction, useApi, useData, useSession, useToast } from '../lib/app';
 import { fmtDateTime, fromLocalInput, NETWORK_LABEL, relative, ROLE_LABEL, toLocalInput } from '../lib/format';
@@ -17,6 +19,8 @@ export function PostEditor() {
   const { id } = useParams();
   const api = useApi();
   const detail = useData(() => (id ? api.call('content.getPost', id) : Promise.resolve(null)), [id]);
+  useReveal(!id || !!detail.data);
+  useAmbient(detail.data?.post.media[0]?.url);
   if (id && detail.error) return <ErrorBox error={detail.error} />;
   if (id && !detail.data) return <Loading />;
   return <Editor key={`${id ?? 'new'}:${detail.data?.post.updatedAt ?? ''}`} detail={detail.data ?? null} />;

@@ -1,6 +1,7 @@
 import { NETWORKS, type Brand, type BrandProfile, type Client, type Network, type SocialAccount } from '@ms/core';
 import { ArrowLeft, Plug, Plus } from 'lucide-react';
 import { useState } from 'react';
+import { useReveal } from '../lib/motion';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ErrorBox, Field, Loading, Modal, NetworkIcon } from '../components/ui';
 import { useAction, useApi, useData } from '../lib/app';
@@ -10,6 +11,7 @@ export function BrandPage() {
   const { id } = useParams();
   const api = useApi();
   const d = useData(() => api.call('catalog.getBrand', id!), [id]);
+  useReveal(!!d.data);
   if (d.error) return <ErrorBox error={d.error} />;
   if (!d.data) return <Loading />;
   return <BrandForm key={d.data.brand.id + d.data.brand.name + JSON.stringify(d.data.brand.profile)} data={d.data} />;

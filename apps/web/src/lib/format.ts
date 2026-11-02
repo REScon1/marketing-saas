@@ -83,3 +83,5 @@ export function greeting(name: string) {
   const first = name.split(' ')[0];
   return `${h < 10 ? 'Dobré ráno' : h < 18 ? 'Dobré odpoledne' : 'Dobrý večer'},\n${first}`;
 }
+
+export const fmtInt = (n: number) => String(Math.round(n));

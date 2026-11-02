@@ -1,3 +1,4 @@
+import { useReveal } from '../lib/motion';
 import { useNavigate } from 'react-router-dom';
 import { BrandTag, Empty, Loading, Networks, PageHead, StatusBadge } from '../components/ui';
 import { isStaffRole, useApi, useData, useSession } from '../lib/app';
@@ -16,6 +17,7 @@ export function Approvals() {
     [staff],
   );
 
+  useReveal(!!(pending.data && others.data));
   if (!pending.data || !others.data) return <Loading />;
 
   return (

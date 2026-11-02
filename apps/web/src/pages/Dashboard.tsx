@@ -2,9 +2,11 @@ import type { Brand, Post } from '@ms/core';
 import { AlertTriangle, ArrowUpRight, CalendarClock, Check, Clock, Eye, Plus, RotateCcw, Send, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Empty, Loading, StatusBadge } from '../components/ui';
+import { useAmbient } from '../components/Ambient';
+import { CountUp, Empty, Loading, StatusBadge } from '../components/ui';
+import { useReveal } from '../lib/motion';
 import { useAction, useApi, useBrandFilter, useData, useSession } from '../lib/app';
-import { fmtDayShort, fmtNum, fmtPct, fmtTime, greeting, relative } from '../lib/format';
+import { fmtDayShort, fmtInt, fmtNum, fmtPct, fmtTime, greeting, relative } from '../lib/format';
 import { useCatalog } from '../lib/hooks';
 
 export function Dashboard() {
@@ -32,6 +34,8 @@ export function Dashboard() {
       attention: all.filter((p) => ['changes_requested', 'failed', 'approved'].includes(p.status)),
     };
   }, [posts.data, now]);
+  useReveal(!!posts.data);
+  useAmbient(derived.next?.media[0]?.url);
 
   if (!posts.data) return <Loading />;
   const { next, coming, attention } = derived;
@@ -51,9 +55,9 @@ export function Dashboard() {
       <div className="page-head">
         <h1>{greeting(actor.name)}</h1>
         <div className="stats">
-          <Stat icon={<Users size={16} />} num={o ? fmtNum(o.reach30) : '–'} label="dosah za 30 dní" trend={reachDelta} />
-          <Stat icon={<Eye size={16} />} num={o ? fmtPct(o.engagementRate30) : '–'} label="míra zapojení, 30 dní" />
-          <Stat icon={<CalendarClock size={16} />} num={o ? String(o.goingOutThisWeek) : '–'} label="postů vyjde tento týden" />
+          <Stat icon={<Users size={16} />} num={<CountUp value={o?.reach30 ?? null} format={fmtNum} />} label="dosah za 30 dní" trend={reachDelta} />
+          <Stat icon={<Eye size={16} />} num={<CountUp value={o?.engagementRate30 ?? null} format={fmtPct} />} label="míra zapojení, 30 dní" />
+          <Stat icon={<CalendarClock size={16} />} num={<CountUp value={o?.goingOutThisWeek ?? null} format={fmtInt} />} label="postů vyjde tento týden" />
         </div>
         <div className="actions">
           <button className="btn primary" onClick={() => nav('/posty/novy')}><Plus size={16} /> Nový post</button>
@@ -123,7 +127,7 @@ function useNow() {
   return now;
 }
 
-export function Stat({ icon, num, label, trend }: { icon: React.ReactNode; num: string; label: string; trend?: number | null }) {
+export function Stat({ icon, num, label, trend }: { icon: React.ReactNode; num: React.ReactNode; label: string; trend?: number | null }) {
   return (
     <div className="stat">
       <span className="ico">{icon}</span>

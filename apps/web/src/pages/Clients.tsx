@@ -1,3 +1,4 @@
+import { useReveal } from '../lib/motion';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -12,41 +13,52 @@ export function Clients() {
   const posts = useData(() => api.call('content.listPosts'), []);
   const [modal, setModal] = useState<null | { kind: 'client' } | { kind: 'brand'; clientId: string }>(null);
 
+  useReveal(!!(clients.data && brands.data));
   if (!clients.data || !brands.data) return <Loading />;
 
   return (
     <>
       <PageHead
-        title="Klienti a značky"
+        title={'Klienti\na značky'}
         sub={`${clients.data.length} klientů · ${brands.data.length} značek`}
         actions={<button className="btn primary" onClick={() => setModal({ kind: 'client' })}><Plus size={16} /> Nový klient</button>}
       />
-      <div className="stack">
+      <div className="stack" style={{ gap: 22 }}>
         {clients.data.map((c) => {
           const bs = brands.data!.filter((b) => b.clientId === c.id);
           return (
-            <section key={c.id} className="card">
-              <div className="card-head">
-                <h2>{c.name}</h2>
-                {c.contactEmail && <span className="small muted">{c.contactEmail}</span>}
-                <button className="btn sm right" onClick={() => setModal({ kind: 'brand', clientId: c.id })}><Plus size={14} /> Značka</button>
+            <section key={c.id} className="panel card-pad">
+              <div className="row" style={{ marginBottom: 14 }}>
+                <span className="avatar">{c.name.slice(0, 2).toUpperCase()}</span>
+                <div>
+                  <h2>{c.name}</h2>
+                  {c.contactEmail && <span className="small muted">{c.contactEmail}</span>}
+                </div>
+                <button className="btn sm" style={{ marginLeft: 'auto' }} onClick={() => setModal({ kind: 'brand', clientId: c.id })}><Plus size={14} /> Značka</button>
               </div>
               {bs.length ? (
-                <table className="table">
-                  <tbody>
-                    {bs.map((b) => {
-                      const ps = (posts.data ?? []).filter((p) => p.brandId === b.id);
-                      return (
-                        <tr key={b.id} className="click" onClick={() => nav(`/znacky/${b.id}`)}>
-                          <td><span className="row"><span className="brand-dot" style={{ background: b.profile.color }} /><strong>{b.name}</strong></span></td>
-                          <td className="small muted">{b.profile.tone.slice(0, 70)}{b.profile.tone.length > 70 ? '…' : ''}</td>
-                          <td className="small">{ps.filter((p) => p.status === 'scheduled').length} naplánováno</td>
-                          <td className="small">{b.requiresClientApproval ? 'schvaluje klient' : 'schvaluje agentura'}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                <div className="brand-grid">
+                  {bs.map((b) => {
+                    const ps = (posts.data ?? []).filter((p) => p.brandId === b.id);
+                    const cover = ps.filter((p) => p.media[0]).sort((x, y) => (y.publishedAt ?? y.updatedAt).localeCompare(x.publishedAt ?? x.updatedAt))[0]?.media[0]?.url;
+                    const count = (st: string[]) => ps.filter((p) => st.includes(p.status)).length;
+                    return (
+                      <button key={b.id} className="brand-card" onClick={() => nav(`/znacky/${b.id}`)} style={{ ['--tint' as string]: b.profile.color }}>
+                        <span className="cover">{cover ? <img src={cover} alt="" /> : <span style={{ background: b.profile.color }} />}</span>
+                        <span className="body">
+                          <span className="row"><span className="brand-dot" style={{ background: b.profile.color }} /><strong>{b.name}</strong>
+                            <span className="badge" style={{ marginLeft: 'auto' }}>{b.requiresClientApproval ? 'schvaluje klient' : 'schvaluje agentura'}</span></span>
+                          <span className="small muted clamp2">{b.profile.tone || 'Tón hlasu zatím není vyplněný.'}</span>
+                          <span className="nums">
+                            <span><b>{count(['scheduled'])}</b> naplánováno</span>
+                            <span><b>{count(['in_review'])}</b> ke schválení</span>
+                            <span><b>{count(['published'])}</b> publikováno</span>
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               ) : (
                 <Empty title="Zatím žádná značka" />
               )}

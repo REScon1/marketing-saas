@@ -1,6 +1,8 @@
 import type { MonthlyReport } from '@ms/core';
 import { Printer, Sparkles } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useAmbient } from '../components/Ambient';
+import { drawIn, gsap, reduced, useReveal } from '../lib/motion';
 import { Empty, ErrorBox, Loading, NetworkIcon } from '../components/ui';
 import { useApi, useBrandFilter, useData, useSession } from '../lib/app';
 import { fmtDate, fmtNum, fmtPct, NETWORK_LABEL } from '../lib/format';
@@ -29,6 +31,8 @@ export function Reports() {
     else if (!brandId && brands[0]) setBrandId(brands[0].id);
   }, [brands, brandId, globalBrand]);
   const report = useData(() => (brandId ? api.call('reports.monthly', brandId, month) : Promise.resolve(null)), [brandId, month]);
+  useReveal(!!report.data);
+  useAmbient(report.data?.topPosts[0]?.post.media[0]?.url);
 
   return (
     <>
@@ -124,10 +128,10 @@ function ReportView({ r, agencyName }: { r: MonthlyReport; agencyName: string })
 
       {r.totals.posts > 0 && (
         <div className="grid cols-4">
-          <KpiCard label="Dosah" value={fmtNum(r.totals.reach)} delta={pctDelta(r.totals.reach, r.previous?.reach)} series={cumulative.map((c) => c.v)} />
-          <KpiCard label="Interakce" value={fmtNum(r.totals.engagements)} delta={pctDelta(r.totals.engagements, r.previous?.engagements)} series={cumEng} />
-          <KpiCard label="Míra zapojení" value={fmtPct(r.totals.engagementRate)} delta={pctDelta(r.totals.engagementRate, r.previous?.engagementRate)} note="interakce / dosah" />
-          <KpiCard label="Publikované posty" value={String(r.totals.posts)} delta={pctDelta(r.totals.posts, r.previous?.posts)} note={r.previous ? `minule ${r.previous.posts}` : 'bez srovnání'} />
+          <KpiCard tint="#b8642c" label="Dosah" value={fmtNum(r.totals.reach)} delta={pctDelta(r.totals.reach, r.previous?.reach)} series={cumulative.map((c) => c.v)} />
+          <KpiCard tint="#2f8f6a" label="Interakce" value={fmtNum(r.totals.engagements)} delta={pctDelta(r.totals.engagements, r.previous?.engagements)} series={cumEng} />
+          <KpiCard tint="#8a7a3a" label="Míra zapojení" value={fmtPct(r.totals.engagementRate)} delta={pctDelta(r.totals.engagementRate, r.previous?.engagementRate)} note="interakce / dosah" series={r.daily.map((d) => (d.reach ? d.engagements / d.reach : 0))} />
+          <KpiCard tint="#4b6aa8" label="Publikované posty" value={String(r.totals.posts)} delta={pctDelta(r.totals.posts, r.previous?.posts)} note={r.previous ? `minule ${r.previous.posts}` : 'bez srovnání'} series={r.daily.map((d, i) => r.daily.slice(0, i + 1).filter((x) => x.reach > 0).length)} />
         </div>
       )}
 
@@ -157,9 +161,9 @@ function ReportView({ r, agencyName }: { r: MonthlyReport; agencyName: string })
   );
 }
 
-function KpiCard({ label, value, delta, series, note }: { label: string; value: string; delta: number | null; series?: number[]; note?: string }) {
+function KpiCard({ label, value, delta, series, note, tint }: { label: string; value: string; delta: number | null; series?: number[]; note?: string; tint: string }) {
   return (
-    <div className="panel kpi-card">
+    <div className="panel kpi-card tinted" style={{ ['--tint' as string]: tint }}>
       <div className="small muted">{label}</div>
       <div className="kpi" style={{ padding: 0 }}><div className="value">{value}</div></div>
       <div className="row small">
@@ -172,12 +176,16 @@ function KpiCard({ label, value, delta, series, note }: { label: string; value: 
 }
 
 function Spark({ values }: { values: number[] }) {
+  const line = useRef<SVGPolylineElement>(null);
+  useLayoutEffect(() => {
+    if (line.current) drawIn([line.current], 0.3);
+  }, [values.join(',')]);
   const W = 200, H = 34;
   const max = Math.max(1, ...values);
   const pts = values.map((v, i) => `${((i / Math.max(1, values.length - 1)) * W).toFixed(1)},${(H - 2 - (v / max) * (H - 6)).toFixed(1)}`);
   return (
     <svg className="spark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden>
-      <polyline points={pts.join(' ')} fill="none" stroke="var(--primary)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+ <polyline ref={line} pathLength={1} points={pts.join(' ')} fill="none" stroke="var(--primary)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
       <circle cx={W} cy={pts.at(-1)!.split(',')[1]} r="3" fill="var(--primary)" />
     </svg>
   );
@@ -186,6 +194,15 @@ function Spark({ values }: { values: number[] }) {
 /** Kumulovaný dosah v měsíci: plocha s přechodem, tečky ve dnech publikace, popisek při najetí. */
 function AreaChart({ points, days }: { points: { date: string; v: number }[]; days: { date: string; reach: number }[] }) {
   const [hover, setHover] = useState<number | null>(null);
+  const svg = useRef<SVGSVGElement>(null);
+  useLayoutEffect(() => {
+    const el = svg.current;
+    if (!el || reduced()) return;
+    // Čára se dokreslí zleva, plocha pod ní se vynoří, tečky publikací vyskočí postupně.
+    drawIn([el.querySelector('.ln')!], 0.15);
+    gsap.fromTo(el.querySelector('.ar'), { opacity: 0 }, { opacity: 1, duration: 0.9, delay: 0.6, ease: 'power2.out' });
+    gsap.fromTo(el.querySelectorAll('.pt'), { scale: 0, transformOrigin: 'center', transformBox: 'fill-box' }, { scale: 1, duration: 0.5, stagger: 0.12, delay: 0.7, ease: 'back.out(3)' });
+  }, [points.map((p) => p.v).join(',')]);
   const W = 760, H = 210, L = 8, R = 8, T = 14, B = 26;
   const max = Math.max(1, ...points.map((p) => p.v));
   const x = (i: number) => L + (i / Math.max(1, points.length - 1)) * (W - L - R);
@@ -195,7 +212,7 @@ function AreaChart({ points, days }: { points: { date: string; v: number }[]; da
   const h = hover !== null ? points[hover] : null;
   return (
     <div style={{ position: 'relative' }}>
-      <svg className="area-chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Kumulovaný dosah během měsíce" onMouseLeave={() => setHover(null)}>
+      <svg ref={svg} className="area-chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Kumulovaný dosah během měsíce" onMouseLeave={() => setHover(null)}>
         <defs>
           <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="#f07b2f" stopOpacity=".55" />
@@ -203,9 +220,9 @@ function AreaChart({ points, days }: { points: { date: string; v: number }[]; da
           </linearGradient>
         </defs>
         {[0.5, 1].map((f) => <line key={f} x1={L} x2={W - R} y1={y(max * f)} y2={y(max * f)} stroke="rgba(255,255,255,.08)" />)}
-        <path d={area} fill="url(#areaFill)" />
-        <path d={line} fill="none" stroke="#f39a5c" strokeWidth="2.5" strokeLinejoin="round" />
-        {days.map((d, i) => d.reach > 0 && <circle key={d.date} cx={x(i)} cy={y(points[i]!.v)} r="4.5" fill="#f39a5c" stroke="#221e1b" strokeWidth="2" />)}
+        <path className="ar" d={area} fill="url(#areaFill)" />
+        <path className="ln" pathLength={1} d={line} fill="none" stroke="#f39a5c" strokeWidth="2.5" strokeLinejoin="round" />
+        {days.map((d, i) => d.reach > 0 && <circle className="pt" key={d.date} cx={x(i)} cy={y(points[i]!.v)} r="4.5" fill="#f39a5c" stroke="#221e1b" strokeWidth="2" />)}
         {points.map((p, i) => (
           <rect key={p.date} x={x(i) - (W / points.length) / 2} y={0} width={W / points.length} height={H} fill="transparent" onMouseEnter={() => setHover(i)} />
         ))}
