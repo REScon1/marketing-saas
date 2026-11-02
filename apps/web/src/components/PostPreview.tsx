@@ -1,4 +1,4 @@
-import { textForNetwork, type Network } from '@ms/core';
+import { textForNetwork, type MediaRef, type Network } from '@ms/core';
 import { Heart, MessageCircle, Repeat2, Send, ThumbsUp } from 'lucide-react';
 import { useState } from 'react';
 import { NETWORK_LABEL, fmtDateTime } from '../lib/format';
@@ -12,6 +12,7 @@ interface Props {
   overrides: Partial<Record<Network, string>>;
   networks: Network[];
   scheduledAt: string | null;
+  media?: MediaRef[];
 }
 
 /** Přibližný náhled postu tak, jak ho uvidí lidé na dané síti. */
@@ -21,7 +22,10 @@ export function PostPreview(p: Props) {
   if (!net) return <div className="empty small">Vyberte síť, aby šel zobrazit náhled.</div>;
   const text = textForNetwork(p.body, p.overrides, net);
   const handle = p.brandName.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z]+/g, '');
-  const media = (
+  const img = p.media?.[0];
+  const media = img ? (
+    <img className={`preview-img ${net === 'instagram' ? 'ig' : ''}`} src={img.url} alt={img.alt || ''} />
+  ) : (
     <div className={`preview-media ${net === 'instagram' ? 'ig' : ''}`} style={{ background: `linear-gradient(135deg, ${p.brandColor}, ${p.brandColor}99)` }}>
       {p.title}
     </div>

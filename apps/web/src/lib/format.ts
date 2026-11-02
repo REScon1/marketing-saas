@@ -77,3 +77,9 @@ export function errorMessage(e: unknown): string {
   if (e && typeof e === 'object' && 'message' in e) return String((e as { message: string }).message);
   return 'Něco se pokazilo';
 }
+
+export function greeting(name: string) {
+  const h = Number(new Intl.DateTimeFormat('cs-CZ', { timeZone: TZ, hour: 'numeric', hourCycle: 'h23' }).format(new Date()));
+  const first = name.split(' ')[0];
+  return `${h < 10 ? 'Dobré ráno' : h < 18 ? 'Dobré odpoledne' : 'Dobrý večer'},\n${first}`;
+}

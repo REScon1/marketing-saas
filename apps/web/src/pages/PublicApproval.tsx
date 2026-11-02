@@ -77,7 +77,7 @@ export function PublicApproval({ backend }: { backend: Backend }) {
       )}
       <section className="card card-pad">
         <p className="small muted" style={{ marginBottom: 10 }}>Plánovaná publikace: <strong>{fmtDateTime(view.post.scheduledAt)}</strong></p>
-        <PostPreview brandName={view.brandName} brandColor={view.brandColor} title={view.post.title} body={view.post.body} overrides={view.post.overrides} networks={view.post.networks} scheduledAt={view.post.scheduledAt} />
+        <PostPreview brandName={view.brandName} brandColor={view.brandColor} title={view.post.title} body={view.post.body} overrides={view.post.overrides} networks={view.post.networks} scheduledAt={view.post.scheduledAt} media={view.post.media} />
       </section>
       {view.comments.length > 0 && (
         <section className="card card-pad stack">

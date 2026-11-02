@@ -433,7 +433,7 @@ export function createServices(deps: Deps) {
         const p: Post = {
           id: newId(), agencyId: actor.agencyId, brandId: brand.id, clientId: brand.clientId,
           title: (input.title ?? '').trim().slice(0, 120) || firstLine(body) || 'Nový post',
-          body, overrides: cleanOverrides(input.overrides, networks), networks, media: input.media ?? [],
+          body, overrides: cleanOverrides(input.overrides, networks), networks, media: validMedia(input.media),
           status: 'draft', scheduledAt: validDate(input.scheduledAt), publishedAt: null,
           version: 1, versions: [{ n: 1, body, networks, createdAt: now, createdBy: actor.userId }],
           aiAssisted: !!input.aiAssisted, createdBy: actor.userId, createdAt: now, updatedAt: now,
@@ -462,7 +462,7 @@ export function createServices(deps: Deps) {
         if (patch.overrides !== undefined || patch.networks !== undefined) {
           after.overrides = cleanOverrides(patch.overrides ?? before.overrides, after.networks);
         }
-        if (patch.media !== undefined) after.media = patch.media;
+        if (patch.media !== undefined) after.media = validMedia(patch.media);
         if (patch.aiAssisted) after.aiAssisted = true;
         if (patch.scheduledAt !== undefined) after.scheduledAt = validDate(patch.scheduledAt);
 
@@ -843,6 +843,41 @@ export function createServices(deps: Deps) {
       return n;
     },
 
+    /** Souhrn pro přehled: posledních 30 dní proti předchozím 30, a co se děje tento týden. */
+    async overview(actor: Actor, filter: { brandId?: Id } = {}) {
+      const brands = (await store.brands.list(actor.agencyId, actor.role === 'client' ? { clientId: actor.clientId ?? '__none__' } : {}))
+        .filter((b) => canSeeBrand(actor, b) && (!filter.brandId || b.id === filter.brandId));
+      const ids = new Set(brands.map((b) => b.id));
+      const now = deps.clock();
+      const iso = (d: number) => new Date(now.getTime() + d * 864e5).toISOString();
+      const posts = (await content.listPosts(actor)).filter((p) => ids.has(p.brandId));
+      const metrics = (await Promise.all(brands.map((b) => store.metrics.listByBrand(actor.agencyId, b.id)))).flat();
+      const pub = posts.filter((p) => p.status === 'published' && p.publishedAt);
+      const cur = sumTotals(pub.filter((p) => p.publishedAt! >= iso(-30)), metrics);
+      const prev = sumTotals(pub.filter((p) => p.publishedAt! >= iso(-60) && p.publishedAt! < iso(-30)), metrics);
+      // týden = pondělí až neděle v Praze; přibližně podle UTC
+      const dow = (now.getUTCDay() + 6) % 7;
+      const weekStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - dow)).toISOString();
+      const weekEnd = new Date(Date.parse(weekStart) + 7 * 864e5).toISOString();
+      const inWeek = (d: string | null) => !!d && d >= weekStart && d < weekEnd;
+      const busy = new Set(posts.filter((p) => p.scheduledAt && p.status !== 'draft').map((p) => p.scheduledAt!.slice(0, 10)));
+      let emptyDays = 0;
+      for (let i = 0; i < 14; i++) if (!busy.has(iso(i).slice(0, 10))) emptyDays++;
+      return {
+        reach30: cur.reach,
+        reach30Prev: prev.reach,
+        engagementRate30: cur.engagementRate,
+        engagementRate30Prev: prev.engagementRate,
+        published30: cur.posts,
+        goingOutThisWeek: posts.filter((p) => ['scheduled', 'approved', 'in_review'].includes(p.status) && inWeek(p.scheduledAt) && p.scheduledAt! >= now.toISOString()).length,
+        scheduledThisWeek: posts.filter((p) => p.status === 'scheduled' && inWeek(p.scheduledAt)).length,
+        publishedThisWeek: posts.filter((p) => p.status === 'published' && inWeek(p.publishedAt)).length,
+        awaitingApproval: posts.filter((p) => p.status === 'in_review').length,
+        emptyDaysNext14: emptyDays,
+        brands: brands.length,
+      };
+    },
+
     async monthly(actor: Actor, brandId: Id, month: string, language: Language = 'cs'): Promise<MonthlyReport> {
       if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw invalid('Měsíc musí být ve tvaru RRRR-MM');
       const brand = await loadBrand(store, actor, brandId);
@@ -952,6 +987,28 @@ function sumTotals(posts: Post[], metrics: PostMetrics[]): ReportTotals {
 
 function firstLine(s: string) {
   return (s.split('\n').find((l) => l.trim()) ?? '').trim().slice(0, 80);
+}
+
+const MAX_MEDIA = 4;
+const MAX_MEDIA_URL = 1_500_000;
+
+/** Obrázky postu: nejvýš 4, data:image (z nahrání) nebo https URL z úložiště. */
+function validMedia(v: unknown): MediaRef[] {
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v)) throw invalid('Média musí být seznam', { field: 'media' });
+  if (v.length > MAX_MEDIA) throw invalid(`Nejvýš ${MAX_MEDIA} obrázky na post`, { field: 'media' });
+  return v.map((m: Partial<MediaRef>) => {
+    const url = String(m?.url ?? '');
+    const okUrl = /^data:image\/(png|jpeg|webp|gif|svg\+xml)[;,]/.test(url) || /^https:\/\//.test(url);
+    if (!okUrl) throw invalid('Nepodporovaný formát obrázku', { field: 'media' });
+    if (url.length > MAX_MEDIA_URL) throw invalid('Obrázek je příliš velký (max. asi 1 MB)', { field: 'media' });
+    return {
+      id: String(m?.id || '').slice(0, 64) || crypto.randomUUID(),
+      kind: m?.kind === 'video' ? 'video' : 'image',
+      url,
+      alt: String(m?.alt ?? '').slice(0, 300),
+    };
+  });
 }
 
 function validDate(v: string | null | undefined): string | null {

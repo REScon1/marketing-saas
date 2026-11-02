@@ -1,9 +1,9 @@
 import {
   brandCheck, NETWORKS, NETWORK_LIMITS, textForNetwork,
-  type BrandIssue, type Network, type PostDetail,
+  type BrandIssue, type MediaRef, type Network, type PostDetail,
 } from '@ms/core';
 import {
-  AlertCircle, ArrowLeft, Check, Copy, ExternalLink, History, Link2, RotateCcw, Send, Sparkles, Undo2, Wand2, Zap,
+  AlertCircle, ArrowLeft, ImagePlus, X as XIcon, Check, Copy, ExternalLink, History, Link2, RotateCcw, Send, Sparkles, Undo2, Wand2, Zap,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -30,6 +30,7 @@ interface Form {
   overrides: Partial<Record<Network, string>>;
   scheduledAt: string;
   aiAssisted: boolean;
+  media: MediaRef[];
 }
 
 function Editor({ detail }: { detail: PostDetail | null }) {
@@ -47,13 +48,13 @@ function Editor({ detail }: { detail: PostDetail | null }) {
     if (post) {
       return {
         brandId: post.brandId, title: post.title, body: post.body, networks: post.networks, overrides: post.overrides,
-        scheduledAt: toLocalInput(post.scheduledAt), aiAssisted: post.aiAssisted,
+        scheduledAt: toLocalInput(post.scheduledAt), aiAssisted: post.aiAssisted, media: post.media,
       };
     }
     const day = params.get('den');
     return {
       brandId: params.get('znacka') ?? '', title: '', body: '', networks: [], overrides: {},
-      scheduledAt: day ? `${day}T10:00` : '', aiAssisted: false,
+      scheduledAt: day ? `${day}T10:00` : '', aiAssisted: false, media: [],
     };
   }, [post, params]);
 
@@ -77,7 +78,7 @@ function Editor({ detail }: { detail: PostDetail | null }) {
   const readOnly = !staff || locked;
   const issues: BrandIssue[] = brand ? brandCheck({ body: f.body, networks: f.networks, overrides: f.overrides }, brand.profile) : [];
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((x) => ({ ...x, [k]: v }));
-  const resetsApproval = !!post && ['in_review', 'approved', 'scheduled', 'failed'].includes(post.status) && (f.body !== initial.body || JSON.stringify(f.networks) !== JSON.stringify(initial.networks) || JSON.stringify(f.overrides) !== JSON.stringify(initial.overrides));
+  const resetsApproval = !!post && ['in_review', 'approved', 'scheduled', 'failed'].includes(post.status) && (f.body !== initial.body || JSON.stringify(f.media) !== JSON.stringify(initial.media) || JSON.stringify(f.networks) !== JSON.stringify(initial.networks) || JSON.stringify(f.overrides) !== JSON.stringify(initial.overrides));
 
   async function save(): Promise<string | undefined> {
     if (!f.brandId) {
@@ -86,7 +87,7 @@ function Editor({ detail }: { detail: PostDetail | null }) {
     }
     const payload = {
       title: f.title, body: f.body, networks: f.networks, overrides: f.overrides,
-      scheduledAt: fromLocalInput(f.scheduledAt), aiAssisted: f.aiAssisted,
+      scheduledAt: fromLocalInput(f.scheduledAt), aiAssisted: f.aiAssisted, media: f.media,
     };
     if (!post) {
       const created = await run(() => api.call('content.createPost', { brandId: f.brandId, ...payload }), 'Post uložen jako koncept');
@@ -152,6 +153,7 @@ function Editor({ detail }: { detail: PostDetail | null }) {
             <Field label="Text postu">
               <textarea className="textarea" rows={9} value={f.body} readOnly={readOnly} onChange={(e) => set('body', e.target.value)} placeholder="Napište text, nebo si nechte navrhnout varianty od AI vpravo." />
             </Field>
+            <MediaField media={f.media} readOnly={readOnly} onChange={(m) => set('media', m)} />
             <div className="field">
               <span>Sítě</span>
               <div className="row">
@@ -198,7 +200,7 @@ function Editor({ detail }: { detail: PostDetail | null }) {
         <aside className="stack">
           <section className="card card-pad">
             <h2 style={{ marginBottom: 12 }}>Náhled</h2>
-            {brand && <PostPreview brandName={brand.name} brandColor={brand.profile.color} title={f.title || 'Váš vizuál'} body={f.body} overrides={f.overrides} networks={f.networks} scheduledAt={fromLocalInput(f.scheduledAt)} />}
+            {brand && <PostPreview brandName={brand.name} brandColor={brand.profile.color} title={f.title || 'Váš vizuál'} body={f.body} overrides={f.overrides} networks={f.networks} scheduledAt={fromLocalInput(f.scheduledAt)} media={f.media} />}
           </section>
 
           {staff && linkUrl && (
@@ -290,7 +292,7 @@ function IssuesList({ issues, networks, body, overrides }: { issues: BrandIssue[
         })}
       </div>
       {issues.length === 0 ? (
-        <div className="issue small" style={{ color: 'var(--ok)' }}><Check size={14} /> V pořádku podle profilu značky</div>
+        <div className="issue small" style={{ color: 'var(--pub)' }}><Check size={14} /> V pořádku podle profilu značky</div>
       ) : (
         issues.map((i, k) => (
           <div key={k} className={`issue ${i.severity}`}><AlertCircle size={14} style={{ flex: 'none', marginTop: 2 }} /> {i.message}</div>
@@ -358,7 +360,7 @@ function AiPanel({ brandId, networks, body, onUse }: { brandId: string; networks
             <div key={i} className="ai-variant">
               <div className="angle">{v.angle}</div>
               <div className="text">{v.body}</div>
-              {v.issues.length > 0 && <div className="small" style={{ color: 'var(--warn)' }}>{v.issues.map((x) => x.message).join(' · ')}</div>}
+              {v.issues.length > 0 && <div className="small" style={{ color: 'var(--wait)' }}>{v.issues.map((x) => x.message).join(' · ')}</div>}
               <div><button className="btn sm" onClick={() => { onUse(v.body); toast('Varianta vložena do textu'); }}>Použít tuto variantu</button></div>
             </div>
           ))}
@@ -415,7 +417,7 @@ function ClientDecisionCard({ detail, onDecide }: { detail: PostDetail; onDecide
     );
   }
   return (
-    <section className="card card-pad stack" style={{ borderColor: 'var(--warn)' }}>
+    <section className="card card-pad stack" style={{ borderColor: 'var(--wait)' }}>
       <h2>Agentura čeká na vaše rozhodnutí</h2>
       <p className="muted">Zkontrolujte text a náhled. Termín publikace: <strong>{fmtDateTime(p.scheduledAt)}</strong>.</p>
       <div className="row">
@@ -466,7 +468,7 @@ function JobsCard({ detail }: { detail: PostDetail }) {
           <NetworkIcon network={j.network} />
           <strong>{NETWORK_LABEL[j.network]}</strong>
           <span className="muted">{label[j.status]}{j.attempts > 1 ? ` · pokus ${j.attempts}` : ''}</span>
-          {j.externalUrl && <a className="small" style={{ marginLeft: 'auto', color: 'var(--accent)' }} href={j.externalUrl} target="_blank" rel="noreferrer">odkaz</a>}
+          {j.externalUrl && <a className="small" style={{ marginLeft: 'auto', color: 'var(--primary)' }} href={j.externalUrl} target="_blank" rel="noreferrer">odkaz</a>}
         </div>
       ))}
     </section>
@@ -518,5 +520,72 @@ function Versions({ detail, onRestore, canRestore }: { detail: PostDetail; onRes
         </div>
       ))}
     </section>
+  );
+}
+
+/** Zmenší fotku v prohlížeči (max. 1600 px, JPEG), aby se vešla do limitu a nezatěžovala úložiště. */
+async function downscale(file: File): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = () => rej(new Error('Soubor se nepodařilo načíst jako obrázek'));
+      i.src = url;
+    });
+    const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * scale);
+    c.height = Math.round(img.naturalHeight * scale);
+    c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
+    for (const q of [0.85, 0.75, 0.6, 0.45]) {
+      const data = c.toDataURL('image/jpeg', q);
+      if (data.length < 1_400_000) return data;
+    }
+    throw new Error('Obrázek je i po zmenšení příliš velký');
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function MediaField({ media, readOnly, onChange }: { media: MediaRef[]; readOnly: boolean; onChange(m: MediaRef[]): void }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  async function add(files: FileList | null) {
+    if (!files?.length) return;
+    setBusy(true);
+    try {
+      const next = [...media];
+      for (const file of Array.from(files).slice(0, 4 - media.length)) {
+        if (!file.type.startsWith('image/')) throw new Error('Zatím jde nahrát jen obrázek (JPG, PNG, WebP)');
+        next.push({ id: crypto.randomUUID(), kind: 'image', url: await downscale(file), alt: file.name.replace(/\.[^.]+$/, '') });
+      }
+      onChange(next);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Nahrání selhalo', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="field">
+      <span>Obrázky</span>
+      <div className="media-grid">
+        {media.map((m) => (
+          <div key={m.id} className="media-item">
+            <img src={m.url} alt={m.alt} />
+            {!readOnly && <button type="button" onClick={() => onChange(media.filter((x) => x.id !== m.id))} aria-label="Odebrat obrázek"><XIcon size={13} /></button>}
+          </div>
+        ))}
+        {!readOnly && media.length < 4 && (
+          <label className="media-add" style={{ cursor: busy ? 'wait' : 'pointer' }}>
+            <span><ImagePlus size={20} /><br />{busy ? 'Nahrávám…' : 'Přidat'}</span>
+            <input id="media-upload" type="file" accept="image/*" multiple hidden onChange={(e) => { void add(e.target.files); e.target.value = ''; }} />
+          </label>
+        )}
+        {readOnly && media.length === 0 && <span className="small muted">Bez obrázku</span>}
+      </div>
+      {!readOnly && <span className="hint">Až 4 obrázky. Velké fotky se automaticky zmenší.</span>}
+    </div>
   );
 }

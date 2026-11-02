@@ -280,3 +280,31 @@ describe('veřejný odkaz', () => {
     expect(Object.keys(c).sort()).toEqual(['authorName', 'authorRole', 'body', 'createdAt']);
   });
 });
+
+describe('obrázky a přehled', () => {
+  it('přijme data:image a https, odmítne jiné schéma a víc než 4 obrázky', async () => {
+    const { s, owner, brand } = await setup();
+    const ok = await s.content.createPost(owner, { brandId: brand.id, body: 'x', networks: ['facebook'], media: [{ id: 'a', kind: 'image', url: 'data:image/png;base64,AAAA', alt: 'chleba' }] });
+    expect(ok.media).toHaveLength(1);
+    await expect(s.content.createPost(owner, { brandId: brand.id, body: 'x', networks: ['facebook'], media: [{ id: 'a', kind: 'image', url: 'javascript:alert(1)', alt: '' }] })).rejects.toMatchObject({ code: 'invalid' });
+    const five = Array.from({ length: 5 }, (_, i) => ({ id: `${i}`, kind: 'image' as const, url: 'https://cdn.example/a.jpg', alt: '' }));
+    await expect(s.content.updatePost(owner, ok.id, { media: five })).rejects.toMatchObject({ code: 'invalid' });
+  });
+
+  it('overview sečte jen značky, které uživatel vidí', async () => {
+    const ctx = await setup();
+    const { s, owner, clock, agency, clientActor, otherBrand } = ctx;
+    const post = await approvedPost(ctx);
+    await s.content.schedule(owner, post.id, '2026-11-05T10:00:00Z');
+    clock.set('2026-11-05T10:00:30Z');
+    await s.publishing.runDue();
+    clock.set('2026-11-08T10:00:00Z');
+    await s.reports.collectMetrics(agency.id);
+    const all = await s.reports.overview(owner);
+    expect(all.reach30).toBeGreaterThan(0);
+    expect(all.publishedThisWeek).toBe(1);
+    expect((await s.reports.overview(clientActor)).reach30).toBe(all.reach30);
+    expect((await s.reports.overview(owner, { brandId: otherBrand.id })).reach30).toBe(0);
+    expect((await s.reports.overview(clientActor, { brandId: otherBrand.id })).brands).toBe(0);
+  });
+});

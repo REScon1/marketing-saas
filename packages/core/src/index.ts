@@ -8,3 +8,4 @@ export * from './publisher.js';
 export * from './services.js';
 export * from './rpc.js';
 export * from './seed.js';
+export * from './art.js';

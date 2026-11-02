@@ -38,6 +38,19 @@ pak `pnpm --filter @ms/web dev`, Vite přesměruje `/api` na port 3001).
 | G9 n8n | Nepoužito; vlastní worker nad outboxem. |
 | P3.1 VELNIRO | Mimo MVP, žádné napojení. |
 
+## Vzhled a ovládání
+
+Podle referenčních videí od zadavatele (ukázky „Social Media Management“ a „Creator Analytics“):
+
+- **Přehled**: pozdrav se souhrnnými čísly (dosah a zapojení za 30 dní, posty tento týden), karta „Na řadě“ s odpočtem do publikace, seznam „Brzy“ a panel „Potřebuje vás“ s akcemi přímo v seznamu (zkusit znovu, naplánovat, upravit).
+- **Publikační kalendář**: pohledy Týden / Měsíc / Seznam, filtry sítí a stavů, mini kalendář, panel nenaplánovaných postů. **Přetažením** post dostane nebo změní termín.
+- **Horní lišta**: přepínač značek (filtruje celou aplikaci), upozornění, plovoucí dock s rychlým „+ Nový post“.
+- **Reporty**: tmavý panel s kumulovaným dosahem, karty s mini grafy, nejlepší posty s náhledy.
+- **Obrázky u postů**: nahrání až 4 obrázků, automatické zmenšení v prohlížeči, náhled v podobě sítě.
+- Světlý režim (mátový, tmavé prvky, žlutý akcent) a tmavý režim (teplý, oranžový akcent).
+
+Z referencí záměrně chybí **Inbox** a **Listening**: podle scope MVP patří až za pilot.
+
 ## Co je simulované nebo chybí
 
 - **Publikace na sítě** je simulovaná (`SimulatedPublisher`). Adaptér pro unified API (Ayrshare apod.) čeká na výběr dodavatele a klíč.
@@ -45,7 +58,7 @@ pak `pnpm --filter @ms/web dev`, Vite přesměruje `/api` na port 3001).
 - **AI** v demu je šablona, ne model. Na serveru se s `ANTHROPIC_API_KEY` použije Claude.
 - **Přihlášení** je dočasné (e-mail + heslo), čeká na rozhodnutí o identitě (auth ADR z auditu).
 - **E-maily** (pozvánky, odkaz ke schválení, připomínky) se zatím neodesílají; odkaz se kopíruje ručně.
-- **Média**: náhled postu ukazuje barevnou plochu místo obrázku; nahrávání souborů není hotové.
+- **Média**: obrázky se ukládají jako data URI přímo k postu (max. 4 × ~1 MB). Pro ostrý provoz patří do objektového úložiště; video zatím nejde.
 - Billing, white-label, TikTok/YouTube, inbox komentářů a GA4/Google Ads reporting jsou podle scope až po pilotu.
 
 ## Rozhodnutí, která jsem udělal za vás (k potvrzení při předvedení)

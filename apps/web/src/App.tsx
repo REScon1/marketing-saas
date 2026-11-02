@@ -1,11 +1,11 @@
 import type { Backend } from '@ms/core';
 import {
-  BarChart3, CalendarDays, CheckCircle2, LayoutDashboard, LogOut, Moon, Sun, Users, Briefcase,
+  BarChart3, Bell, Briefcase, CalendarDays, CheckCircle2, Layers, LayoutDashboard, LogOut, Moon, Plus, Sun, Users, Waves,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { HashRouter, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Avatar } from './components/ui';
-import { AppProviders, SessionProvider, isStaffRole, useData, useSession, type Session, type SessionActor } from './lib/app';
+import { AppProviders, BrandFilterProvider, SessionProvider, isStaffRole, useBrandFilter, useData, useSession, type Session, type SessionActor } from './lib/app';
 import { DemoBackend } from './lib/demo-backend';
 import { errorMessage, ROLE_LABEL } from './lib/format';
 import { HttpBackend, type Me } from './lib/http-backend';
@@ -117,9 +117,7 @@ function Login({ boot, onSession }: { boot: Extract<Boot, { kind: 'demo' | 'http
   return (
     <div className="login-wrap">
       <div className="login stack">
-        <div className="logo" style={{ padding: 0 }}>
-          <span className="logo-mark">P</span>Postovna
-        </div>
+        <div className="logo"><span className="logo-mark"><Waves size={20} /></span>Postovna</div>
         {boot.kind === 'demo' ? (
           <div className="card card-pad stack">
             <h1>Vyzkoušejte demo</h1>
@@ -186,65 +184,126 @@ function useTheme() {
   return { dark, toggle: () => setTheme(dark ? 'light' : 'dark') };
 }
 
+
 function Shell() {
+  const s = useSession();
+  return (
+    <BrandFilterProvider>
+      <ShellInner />
+    </BrandFilterProvider>
+  );
+}
+
+function ShellInner() {
   const s = useSession();
   const { actor } = s;
   const staff = isStaffRole(actor.role);
   const theme = useTheme();
   const nav = useNavigate();
-  const [confirmReset, setConfirmReset] = useState(false);
   const loc = useLocation();
+  const { brandId, setBrandId } = useBrandFilter();
+  const [confirmReset, setConfirmReset] = useState(false);
+  const brands = useData(() => s.backend.call('catalog.listBrands'), []);
   const pending = useData(() => s.backend.call('content.pendingApprovals'), []);
+  const attention = useData(() => (staff ? s.backend.call('content.listPosts', { status: ['changes_requested', 'failed', 'approved'] }) : Promise.resolve([])), [staff]);
   const pendingCount = pending.data?.length ?? 0;
-  const changes = useData(() => (staff ? s.backend.call('content.listPosts', { status: ['changes_requested', 'failed'] }) : Promise.resolve([])), [staff]);
+  const needsCount = staff ? (attention.data?.length ?? 0) + pendingCount : pendingCount;
 
-  const links = useMemo(
-    () =>
-      staff
-        ? [
-            { to: '/', label: 'Přehled', icon: LayoutDashboard, end: true },
-            { to: '/kalendar', label: 'Kalendář', icon: CalendarDays },
-            { to: '/schvalovani', label: 'Schvalování', icon: CheckCircle2, count: pendingCount },
-            { to: '/klienti', label: 'Klienti a značky', icon: Briefcase },
-            { to: '/reporty', label: 'Reporty', icon: BarChart3 },
-            ...(actor.role === 'owner' ? [{ to: '/tym', label: 'Tým', icon: Users }] : []),
-          ]
-        : [
-            { to: '/', label: 'Ke schválení', icon: CheckCircle2, end: true, count: pendingCount },
-            { to: '/kalendar', label: 'Kalendář', icon: CalendarDays },
-            { to: '/reporty', label: 'Reporty', icon: BarChart3 },
-          ],
-    [staff, pendingCount, actor.role],
-  );
-
+  useEffect(() => {
+    if (brandId && brands.data && !brands.data.some((b) => b.id === brandId)) setBrandId('');
+  }, [brands.data, brandId, setBrandId]);
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [loc.pathname]);
 
+  const tabs = staff
+    ? [
+        { to: '/', label: 'Přehled', end: true },
+        { to: '/kalendar', label: 'Kalendář' },
+        { to: '/schvalovani', label: 'Schvalování', count: pendingCount },
+        { to: '/reporty', label: 'Reporty' },
+        { to: '/klienti', label: 'Klienti a značky' },
+      ]
+    : [
+        { to: '/', label: 'Ke schválení', end: true, count: pendingCount },
+        { to: '/kalendar', label: 'Kalendář' },
+        { to: '/reporty', label: 'Reporty' },
+      ];
+
+  const dock = staff
+    ? [
+        { to: '/', label: 'Přehled', icon: LayoutDashboard, end: true },
+        { to: '/kalendar', label: 'Kalendář', icon: CalendarDays },
+        { to: '/schvalovani', label: 'Schvalování', icon: CheckCircle2 },
+        { to: '/reporty', label: 'Reporty', icon: BarChart3 },
+        { to: '/klienti', label: 'Klienti a značky', icon: Briefcase, hideMobile: true },
+        ...(actor.role === 'owner' ? [{ to: '/tym', label: 'Tým', icon: Users, hideMobile: true }] : []),
+      ]
+    : [
+        { to: '/', label: 'Ke schválení', icon: CheckCircle2, end: true },
+        { to: '/kalendar', label: 'Kalendář', icon: CalendarDays },
+        { to: '/reporty', label: 'Reporty', icon: BarChart3 },
+      ];
+
   return (
-    <div className="shell">
-      <nav className="sidebar" aria-label="Hlavní navigace">
-        <div className="logo"><span className="logo-mark">P</span>Postovna</div>
-        <div className="agency-name">{s.agencyName}</div>
-        {links.map((l) => (
-          <NavLink key={l.to} to={l.to} end={l.end} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-            <l.icon size={17} />
-            <span className="label">{l.label}</span>
-            {!!l.count && <span className="count">{l.count}</span>}
+    <div className="app">
+      <nav className="dock" aria-label="Rychlá navigace">
+        {staff && (
+          <button className="plus" onClick={() => nav('/posty/novy')} aria-label="Nový post">
+            <Plus size={20} /><span className="tip">Nový post</span>
+          </button>
+        )}
+        {dock.map((d) => (
+          <NavLink key={d.to} to={d.to} end={d.end} className={({ isActive }) => `${isActive ? 'active' : ''} ${d.hideMobile ? 'hide-m' : ''}`} aria-label={d.label}>
+            <d.icon size={18} /><span className="tip">{d.label}</span>
           </NavLink>
         ))}
-        <div className="sidebar-foot">
-          {staff && !!changes.data?.length && (
-            <button className="alert warn small" style={{ border: 0, cursor: 'pointer', textAlign: 'left' }} onClick={() => nav('/schvalovani')}>
-              {changes.data.length} {changes.data.length === 1 ? 'post potřebuje' : 'posty potřebují'} vaši pozornost
-            </button>
-          )}
-        </div>
+        <span className="sep" />
+        <button onClick={theme.toggle} aria-label="Přepnout světlý a tmavý režim">
+          {theme.dark ? <Sun size={18} /> : <Moon size={18} />}<span className="tip">{theme.dark ? 'Světlý režim' : 'Tmavý režim'}</span>
+        </button>
+        <button className="hide-m" onClick={() => { nav('/'); s.logout(); }} aria-label={s.demo ? 'Přepnout uživatele' : 'Odhlásit'}>
+          <LogOut size={18} /><span className="tip">{s.demo ? 'Přepnout uživatele' : 'Odhlásit'}</span>
+        </button>
       </nav>
+
       <div className="main">
+        <header className="topbar no-print">
+          <div className="logo"><span className="logo-mark"><Waves size={20} /></span>Postovna</div>
+          <nav className="tabs" aria-label="Hlavní navigace">
+            {tabs.map((t) => (
+              <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => (isActive ? 'active' : '')}>
+                {t.label}
+                {!!t.count && <span className="count">{t.count}</span>}
+              </NavLink>
+            ))}
+          </nav>
+          <div className="spacer" />
+          {(brands.data?.length ?? 0) > 1 && (
+            <label className="pill-select">
+              <span className="ico"><Layers size={14} /></span>
+              <select id="brand-filter" value={brandId} onChange={(e) => setBrandId(e.target.value)} aria-label="Značka">
+                <option value="">Všechny značky</option>
+                {brands.data!.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </label>
+          )}
+          <button className="icon-btn" onClick={() => nav(staff ? '/' : '/')} aria-label={`Potřebuje pozornost: ${needsCount}`}>
+            <Bell size={17} />
+            {needsCount > 0 && <span className="dotcount">{needsCount}</span>}
+          </button>
+          <div className="me">
+            <Avatar name={actor.name} />
+            <div className="who">
+              <div className="strong small">{actor.name}</div>
+              <div className="small muted">{ROLE_LABEL[actor.role]} · {s.agencyName}</div>
+            </div>
+          </div>
+        </header>
+
         {s.demo && (
           <div className="demo-banner no-print">
-            <span>Demo: data jsou smyšlená a uložená jen ve vašem prohlížeči. AI texty generuje šablona, publikace je simulovaná.</span>
+            <span><strong>Demo.</strong> Smyšlená data uložená jen ve vašem prohlížeči. AI píše šablona, publikace je simulovaná.</span>
             {confirmReset ? (
               <>
                 <span>Smazat vaše změny?</span>
@@ -254,24 +313,10 @@ function Shell() {
             ) : (
               <button onClick={() => setConfirmReset(true)}>Obnovit ukázková data</button>
             )}
+            <button onClick={() => { nav('/'); s.logout(); }}>Přepnout uživatele</button>
           </div>
         )}
-        <header className="topbar no-print">
-          <div className="spacer" />
-          <button className="btn ghost sm" onClick={theme.toggle} aria-label="Přepnout motiv">
-            {theme.dark ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
-          <div className="row" style={{ gap: 10 }}>
-            <Avatar name={actor.name} />
-            <div style={{ lineHeight: 1.2 }}>
-              <div className="strong small">{actor.name}</div>
-              <div className="small muted">{ROLE_LABEL[actor.role]}</div>
-            </div>
-          </div>
-          <button className="btn ghost sm" onClick={() => { nav('/'); s.logout(); }} title={s.demo ? 'Přepnout uživatele' : 'Odhlásit'}>
-            <LogOut size={16} /> <span>{s.demo ? 'Přepnout' : 'Odhlásit'}</span>
-          </button>
-        </header>
+
         <main className="content">
           <Routes>
             <Route path="/" element={staff ? <Dashboard /> : <Approvals />} />

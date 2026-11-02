@@ -16,7 +16,7 @@ describe('seed demo', () => {
     expect(by('changes_requested')).toBe(1);
     expect(by('scheduled')).toBe(2);
     expect(by('approved')).toBe(1);
-    expect(by('draft')).toBe(2);
+    expect(by('draft')).toBe(4);
     const client = await s.tenancy.resolveActor(r.personas[2]!.userId, r.agencyId);
     expect((await s.content.pendingApprovals(client)).length).toBe(1);
     const brands = await s.catalog.listBrands(owner);

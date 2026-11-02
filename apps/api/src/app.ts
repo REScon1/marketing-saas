@@ -34,7 +34,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({
     logger: opts.logger ?? true,
     trustProxy: config.trustProxy,
-    bodyLimit: 1024 * 1024,
+    bodyLimit: 6 * 1024 * 1024, // obrázky postů jako data URI (max. 4 × ~1 MB)
   });
   const auth = new AuthRepo(pool);
   const publicLimiter = new RateLimiter(opts.limits?.publicPerMinute ?? 60, 60_000);

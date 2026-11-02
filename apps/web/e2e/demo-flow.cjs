@@ -24,7 +24,7 @@ const URL = 'file://' + require('path').resolve(__dirname, '../dist-demo/index.h
   await p.click('.modal button:has-text("Odeslat připomínky")');
   await p.waitForSelector('text=Odesláno agentuře');
   // 2) manager: fix, resend, get link
-  await p.click('button:has-text("Přepnout")'); await p.click('.persona >> nth=1'); await p.waitForSelector('.kpi');
+  await p.click('button:has-text("Přepnout")'); await p.click('.persona >> nth=1'); await p.waitForSelector('.upnext');
   await p.click('text=Vánoční cukroví na objednávku'); await p.waitForSelector('text=Klient chce úpravy');
   await p.fill('textarea.textarea >> nth=0', 'Letos poprvé pečeme vánoční cukroví i na objednávku. Kilo směsi z 12 druhů za 690 Kč, vyzvednutí od 18. prosince. 🎄\n\n#pekarnaulipy #cukrovi');
   await p.click('button:has-text("Uložit")'); await p.waitForTimeout(500);
@@ -42,7 +42,7 @@ const URL = 'file://' + require('path').resolve(__dirname, '../dist-demo/index.h
   await g.waitForSelector('text=Děkujeme, post je schválený');
   await g.close();
   // 4) manager schedules + simulate publish
-  await p.goto(URL + '#/'); await p.reload(); await p.waitForSelector('.persona'); await p.click('.persona >> nth=1'); await p.waitForSelector('.kpi');
+  await p.goto(URL + '#/'); await p.reload(); await p.waitForSelector('.persona'); await p.click('.persona >> nth=1'); await p.waitForSelector('.upnext');
   await p.goto(URL + '#/schvalovani'); await p.waitForTimeout(400);
   await p.click('text=Vánoční cukroví na objednávku'); await p.waitForSelector('button:has-text("Naplánovat")');
   await p.click('button:has-text("Naplánovat")'); await p.waitForSelector('button:has-text("Simulovat publikaci teď")');

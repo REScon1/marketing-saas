@@ -227,7 +227,7 @@ describe('Postgres: reporty a seed', () => {
     expect(by('published')).toBe(15);
     expect(by('in_review')).toBe(2);
     expect(by('scheduled')).toBe(2);
-    expect(by('draft')).toBe(2);
+    expect(by('draft')).toBe(4);
     const client = await s.tenancy.resolveActor(r.personas[2]!.userId, r.agencyId);
     expect((await s.content.pendingApprovals(client)).length).toBe(1);
   });

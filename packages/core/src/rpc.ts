@@ -37,6 +37,7 @@ export const ACTOR_METHODS = {
   'content.pendingApprovals': (s: S) => s.content.pendingApprovals,
   'content.activity': (s: S) => s.content.activity,
   'reports.monthly': (s: S) => s.reports.monthly,
+  'reports.overview': (s: S) => s.reports.overview,
   'ai.info': (s: S) => s.ai.info,
   'ai.draft': (s: S) => s.ai.draft,
   'ai.rewrite': (s: S) => s.ai.rewrite,

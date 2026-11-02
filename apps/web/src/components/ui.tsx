@@ -14,12 +14,12 @@ export function StatusBadge({ status }: { status: PostStatus }) {
 
 export const STATUS_COLOR: Record<PostStatus, string> = {
   draft: 'var(--muted)',
-  in_review: 'var(--warn)',
+  in_review: 'var(--wait)',
   changes_requested: 'var(--bad)',
-  approved: 'var(--accent)',
-  scheduled: 'var(--info)',
-  publishing: 'var(--info)',
-  published: 'var(--ok)',
+  approved: 'var(--primary)',
+  scheduled: 'var(--sched)',
+  publishing: 'var(--sched)',
+  published: 'var(--pub)',
   failed: 'var(--bad)',
 };
 

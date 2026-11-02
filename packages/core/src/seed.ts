@@ -1,3 +1,4 @@
+import { postArt, type ArtMotif } from './art.js';
 import type { Services } from './services.js';
 import type { Actor, Network } from './types.js';
 
@@ -80,6 +81,14 @@ export async function seedDemo(s: Services, clock: SeedClock, today: Date = new 
     nov: await s.tenancy.resolveActor(pavel.userId, agency.id),
   };
   const brands = { pek, fit, nov };
+  const motifs: Record<string, ArtMotif> = { [pek.id]: 'bakery', [fit.id]: 'fitness', [nov.id]: 'build' };
+  const colorOf: Record<string, string> = { [pek.id]: pek.profile.color, [fit.id]: fit.profile.color, [nov.id]: nov.profile.color };
+  // Ukázkové posty dostanou ilustraci v barvě značky (prázdný koncept ne).
+  const createPost: Services['content']['createPost'] = (a, input) =>
+    s.content.createPost(a, {
+      ...input,
+      media: input.media ?? (input.body ? [{ id: `art-${input.title}`, kind: 'image', url: postArt(input.title ?? input.body, colorOf[input.brandId]!, motifs[input.brandId]!), alt: input.title ?? '' }] : []),
+    });
 
   // ---------- Historie: publikované posty za poslední ~2,5 měsíce ----------
   const history: PostSpec[] = [
@@ -107,7 +116,7 @@ export async function seedDemo(s: Services, clock: SeedClock, today: Date = new 
   async function publishAt(h: PostSpec) {
     const b = brands[h.brand];
     clock.set(at(h.day - 3, 10));
-    const p = await s.content.createPost(manager, { brandId: b.id, title: h.title, body: h.body, networks: h.networks, aiAssisted: h.day % 2 === 0 });
+    const p = await createPost(manager, { brandId: b.id, title: h.title, body: h.body, networks: h.networks, aiAssisted: h.day % 2 === 0 });
     await s.content.submitForApproval(manager, p.id);
     clock.set(at(h.day - 2, 14));
     await s.content.decide(clients[h.brand], p.id, 'approved');
@@ -120,13 +129,13 @@ export async function seedDemo(s: Services, clock: SeedClock, today: Date = new 
   // ---------- Současnost ----------
   clock.set(at(-1, 15));
   // Čeká na schválení klientem
-  const r1 = await s.content.createPost(manager, {
+  const r1 = await createPost(manager, {
     brandId: pek.id, title: 'Vánoční cukroví na objednávku', networks: ['facebook', 'instagram'], aiAssisted: true,
     body: 'Letos poprvé pečeme vánoční cukroví i na objednávku. Kilo směsi z 12 druhů, vyzvednutí od 18. prosince. Objednávky přijímáme v prodejně do 10. 12. 🎄\n\n#pekarnaulipy #cukrovi',
     scheduledAt: at(4, 8),
   });
   await s.content.submitForApproval(manager, r1.id, { note: 'Jano, cenu doplníme, až ji potvrdíš.' });
-  const r2 = await s.content.createPost(manager, {
+  const r2 = await createPost(manager, {
     brandId: fit.id, title: 'Vánoční dárkové poukazy', networks: ['facebook', 'instagram'],
     body: 'Dej pod stromeček pohyb! 🎁 Dárkové poukazy na 10 vstupů nebo měsíční permanentku koupíš na recepci i online.\n\n#fitzonabrno #darek',
     scheduledAt: at(3, 17),
@@ -134,7 +143,7 @@ export async function seedDemo(s: Services, clock: SeedClock, today: Date = new 
   await s.content.submitForApproval(manager, r2.id);
 
   // Vráceno k úpravě
-  const r3 = await s.content.createPost(manager, {
+  const r3 = await createPost(manager, {
     brandId: nov.id, title: 'Den otevřených dveří na stavbě', networks: ['linkedin', 'facebook'],
     body: 'Zveme vás na den otevřených dveří na stavbě bytového domu v Líšni. Provedeme vás stavbou a ukážeme technologie, které používáme.\n\n#stavebnictvi',
     scheduledAt: at(9, 10),
@@ -145,7 +154,7 @@ export async function seedDemo(s: Services, clock: SeedClock, today: Date = new 
 
   // Schváleno a naplánováno
   clock.set(at(-2, 11));
-  const sch = await s.content.createPost(manager, {
+  const sch = await createPost(manager, {
     brandId: fit.id, title: 'Večerní běh s čelovkami', networks: ['facebook', 'instagram'], aiAssisted: true,
     body: 'Tma nás nezastaví! Ve středu v 19:00 vybíháme z Lužánek na večerní běh s čelovkami. 5 km, tempo pro všechny, čelovky půjčíme. 🔦🏃\n\n#fitzonabrno #brno #beh',
   });
@@ -153,7 +162,7 @@ export async function seedDemo(s: Services, clock: SeedClock, today: Date = new 
   await s.content.decide(clients.fit, sch.id, 'approved');
   await s.content.schedule(manager, sch.id, at(2, 18));
 
-  const sch2 = await s.content.createPost(manager, {
+  const sch2 = await createPost(manager, {
     brandId: pek.id, title: 'Perníčky s dětmi', networks: ['facebook'],
     body: 'V sobotu od 10:00 zdobíme perníčky s dětmi přímo v pekárně. Zástěry půjčíme, poleva je na nás. 🙌',
   });
@@ -162,7 +171,7 @@ export async function seedDemo(s: Services, clock: SeedClock, today: Date = new 
   await s.content.schedule(manager, sch2.id, at(5, 9));
 
   // Schváleno, čeká na naplánování
-  const ap = await s.content.createPost(manager, {
+  const ap = await createPost(manager, {
     brandId: nov.id, title: 'PF 2027', networks: ['linkedin'],
     body: 'Děkujeme investorům, projektantům i subdodavatelům za spolupráci v roce 2026. Do nového roku přejeme pevné základy.\n\n#stavebnictvi',
   });
@@ -170,11 +179,19 @@ export async function seedDemo(s: Services, clock: SeedClock, today: Date = new 
   await s.content.decide(clients.nov, ap.id, 'approved');
 
   // Koncepty
-  await s.content.createPost(manager, {
+  await createPost(manager, {
     brandId: fit.id, title: 'Novoroční předsevzetí', networks: ['instagram'], scheduledAt: at(12, 7),
     body: 'Předsevzetí, která vydrží: místo „budu chodit každý den“ zkus „přijdu 2× týdně“. ',
   });
-  await s.content.createPost(manager, { brandId: pek.id, title: 'Tříkrálový koláč', networks: ['facebook', 'instagram'], scheduledAt: at(14, 8), body: '' });
+  await createPost(manager, { brandId: pek.id, title: 'Tříkrálový koláč', networks: ['facebook', 'instagram'], body: '' });
+  await createPost(manager, {
+    brandId: fit.id, title: 'Permanentka na 3 měsíce', networks: ['facebook', 'instagram'],
+    body: 'Nový rok, nová rutina. Tříměsíční permanentka teď s úvodní konzultací u trenéra v ceně. 💪\n\n#fitzonabrno',
+  });
+  await createPost(manager, {
+    brandId: nov.id, title: 'Referenční stavba: hala Modřice', networks: ['linkedin'],
+    body: 'Hala v Modřicích v pasivním standardu je pod střechou. Spotřeba na vytápění 12 kWh/m² za rok.\n\n#stavebnictvi',
+  });
 
   clock.set(null);
   await s.reports.collectMetrics(agency.id);

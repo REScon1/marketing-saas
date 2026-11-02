@@ -37,6 +37,29 @@ export const useRefresh = () => useContext(RefreshCtx).bump;
 export const useToast = () => useContext(ToastCtx);
 export const isStaffRole = (r: Role) => r === 'owner' || r === 'manager';
 
+const BrandFilterCtx = createContext<{ brandId: string; setBrandId(id: string): void }>({ brandId: '', setBrandId: () => {} });
+/** Globální filtr značky z horní lišty („Všechny značky“ = ''). */
+export const useBrandFilter = () => useContext(BrandFilterCtx);
+
+export function BrandFilterProvider({ children }: { children: ReactNode }) {
+  const [brandId, setState] = useState(() => {
+    try {
+      return localStorage.getItem('ms-brand') ?? '';
+    } catch {
+      return '';
+    }
+  });
+  const setBrandId = useCallback((id: string) => {
+    setState(id);
+    try {
+      localStorage.setItem('ms-brand', id);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  return <BrandFilterCtx.Provider value={{ brandId, setBrandId }}>{children}</BrandFilterCtx.Provider>;
+}
+
 export function SessionProvider({ session, children }: { session: Session; children: ReactNode }) {
   return <SessionCtx.Provider value={session}>{children}</SessionCtx.Provider>;
 }
