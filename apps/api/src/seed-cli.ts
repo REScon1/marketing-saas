@@ -18,6 +18,23 @@ try {
   await migrate(pool, undefined, (m) => console.info(m));
   // Seed vždy se simulovanou publikací a šablonovým asistentem: nic se nesmí poslat ven.
   const { services, store, clock } = buildServices(pool, { ...cfg, anthropicApiKey: null, publisher: 'simulated' });
+  // Jednorázový reset dema: nová hodnota DEMO_RESET_TOKEN smaže VŠECHNA data aplikace a seed proběhne znovu.
+  // Jen pro demo nasazení (vyžaduje i ALLOW_DEMO_SEED=1). Stejný token podruhé nic nedělá.
+  const token = process.env.DEMO_RESET_TOKEN?.trim();
+  if (token) {
+    await pool.query('CREATE TABLE IF NOT EXISTS demo_meta (key text PRIMARY KEY, value text NOT NULL)');
+    const prev = await pool.query<{ value: string }>("SELECT value FROM demo_meta WHERE key = 'reset_token'");
+    if (prev.rows[0]?.value !== token) {
+      const tables = await pool.query<{ tablename: string }>(
+        "SELECT tablename FROM pg_tables WHERE schemaname = current_schema() AND tablename NOT IN ('schema_migrations', 'demo_meta')",
+      );
+      if (tables.rows.length) {
+        await pool.query(`TRUNCATE ${tables.rows.map((t) => `"${t.tablename}"`).join(', ')} CASCADE`);
+      }
+      await pool.query("INSERT INTO demo_meta (key, value) VALUES ('reset_token', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", [token]);
+      console.info(`Demo reset (${token}): data smazána, seed proběhne znovu.`);
+    }
+  }
   if (await store.agencies.getBySlug(DEMO_SLUG)) {
     console.error(`Demo agentura „${DEMO_SLUG}“ už existuje – seed nic nezměnil.`);
     process.exitCode = 1;

@@ -38,6 +38,18 @@ pak `pnpm --filter @ms/web dev`, Vite přesměruje `/api` na port 3001).
 | G9 n8n | Nepoužito; vlastní worker nad outboxem. |
 | P3.1 VELNIRO | Mimo MVP, žádné napojení. |
 
+## Studio (v2)
+
+Jádrem aplikace je tvorba hotového obsahu (viz `docs/studio-spec.md`):
+
+- **Studio**: nápad jednou větou + formát (grafika, karusel, reel, story) → 3 koncepty s vizuálem ve značce, texty pro každou síť, hashtagy a heuristickou „sílou háčku“.
+- **Render engine** (`apps/web/src/studio/render`): 8 šablon, typografie a barvy z brand kitu, animované reely/story (Ken Burns, animované titulky, přechody), export PNG a videa přímo v prohlížeči.
+- **Věrné náhledy** (`apps/web/src/studio/preview`): Instagram post a karusel, Reels/TikTok/Story v telefonu, Facebook, LinkedIn, mřížka profilu s přetahováním.
+- **Autopilot**: plán celého měsíce z pilířů obsahu a jedním klikem koncepty v kalendáři.
+- **Brand kit**: logo, 3 barvy, písma, pilíře, web.
+
+Nasazení: Railway projekt `marketing-saas` (Dockerfile v kořeni). Ukázková data obnoví nová hodnota `DEMO_RESET_TOKEN` (smaže všechna data, jen pro demo).
+
 ## Vzhled a ovládání
 
 Podle referenčních videí od zadavatele (ukázky „Social Media Management“ a „Creator Analytics“):
