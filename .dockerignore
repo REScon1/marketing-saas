@@ -1,0 +1,7 @@
+**/node_modules
+**/dist
+**/dist-demo
+apps/api/.pg
+.git
+*.log
+.env
