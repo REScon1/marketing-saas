@@ -1,7 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import {
-  buildDraftPrompt, buildRewritePrompt, DomainError,
-  type Brand, type ContentAssistant, type DraftRequest, type DraftVariant, type Language, type ReportSummaryInput,
+  buildConceptsPrompt, buildDraftPrompt, buildPlanPrompt, buildRewritePrompt, coerceConcept, DomainError, planSlots, templatePlan,
+  TEMPLATE_IDS,
+  type Brand, type Concept, type ConceptsRequest, type ContentAssistant, type DraftRequest, type DraftVariant, type Language, type Network,
+  type PlanItem, type PlanRequest, type PlanSlot, type ReportSummaryInput,
 } from '@ms/core';
 
 /** Minimální podmnožina klienta, kterou potřebujeme (v testech se dá podvrhnout). */
@@ -25,14 +27,7 @@ export function stripCodeFences(text: string): string {
  * obal v code fence i text okolo JSONu. Při chybě vyhodí DomainError 'invalid' s českou zprávou.
  */
 export function parseDraftVariants(text: string, max = 3): DraftVariant[] {
-  const cleaned = stripCodeFences(text);
-  let data: unknown = tryParse(cleaned);
-  if (data === undefined) {
-    // Text okolo JSONu: vezmi první objekt / pole.
-    const start = cleaned.search(/[[{]/);
-    const end = Math.max(cleaned.lastIndexOf('}'), cleaned.lastIndexOf(']'));
-    if (start >= 0 && end > start) data = tryParse(cleaned.slice(start, end + 1));
-  }
+  const data = extractJson(text);
   const list = Array.isArray(data) ? data : (data as { variants?: unknown } | undefined)?.variants;
   if (!Array.isArray(list)) throw new DomainError('invalid', PARSE_ERROR);
   const out: DraftVariant[] = [];
@@ -46,6 +41,101 @@ export function parseDraftVariants(text: string, max = 3): DraftVariant[] {
   if (!out.length) throw new DomainError('invalid', PARSE_ERROR);
   return out.slice(0, Math.max(1, max));
 }
+
+/** JSON z odpovědi modelu: snese code fence i text okolo (vezme první objekt / pole). */
+export function extractJson(text: string): unknown {
+  const cleaned = stripCodeFences(text);
+  let data: unknown = tryParse(cleaned);
+  if (data === undefined) {
+    const start = cleaned.search(/[[{]/);
+    const end = Math.max(cleaned.lastIndexOf('}'), cleaned.lastIndexOf(']'));
+    if (start >= 0 && end > start) data = tryParse(cleaned.slice(start, end + 1));
+  }
+  return data;
+}
+
+/**
+ * Koncepty z odpovědi modelu. Každý projde coerceConcept (validDesign, jen požadované sítě,
+ * hookScore přepočítaný heuristikou); nevalidní se zahodí. Když neprojde žádný, vyhodí DomainError.
+ */
+export function parseConcepts(text: string, req: Pick<ConceptsRequest, 'brand' | 'format' | 'networks' | 'brief' | 'count'>): Concept[] {
+  const data = extractJson(text);
+  const list = Array.isArray(data) ? data : (data as { concepts?: unknown } | undefined)?.concepts;
+  if (!Array.isArray(list)) throw new DomainError('invalid', PARSE_ERROR);
+  const out = list.map((c, i) => coerceConcept(c, req, i)).filter((c): c is Concept => !!c);
+  if (!out.length) throw new DomainError('invalid', PARSE_ERROR);
+  return out.slice(0, Math.max(1, req.count));
+}
+
+/** Nápady k rozvrhu plánu. Chybějící nebo prázdné položky doplní deterministická šablona. */
+export function parsePlanIdeas(text: string, slots: PlanSlot[], fallback: PlanItem[]): PlanItem[] {
+  const data = extractJson(text);
+  const list = Array.isArray(data) ? data : (data as { items?: unknown } | undefined)?.items;
+  if (!Array.isArray(list)) throw new DomainError('invalid', PARSE_ERROR);
+  const ideas = new Map<number, string>();
+  for (const it of list) {
+    const idx = Number((it as { index?: unknown })?.index);
+    const idea = (it as { idea?: unknown })?.idea;
+    if (Number.isInteger(idx) && idx >= 0 && idx < slots.length && typeof idea === 'string' && idea.trim()) ideas.set(idx, idea.trim().slice(0, 200));
+  }
+  if (!ideas.size) throw new DomainError('invalid', PARSE_ERROR);
+  return slots.map((s, i) => ({ ...s, idea: ideas.get(i) ?? fallback[i]?.idea ?? s.pillar }));
+}
+
+/** JSON schéma pro structured outputs (konceptů). Formát, poměr stran a seed doplní kód. */
+export function conceptsSchema(networks: Network[]) {
+  const str = { type: 'string' };
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['concepts'],
+    properties: {
+      concepts: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['angle', 'hook', 'templateId', 'slides', 'captions', 'hashtags', 'why'],
+          properties: {
+            angle: str,
+            hook: str,
+            templateId: { type: 'string', enum: [...TEMPLATE_IDS] },
+            slides: {
+              type: 'array',
+              items: {
+                type: 'object', additionalProperties: false, required: ['headline'],
+                properties: { kicker: str, headline: str, body: str },
+              },
+            },
+            cta: str,
+            durationSec: { type: 'integer' },
+            captions: {
+              type: 'object', additionalProperties: false, required: [...networks],
+              properties: Object.fromEntries(networks.map((n) => [n, str])),
+            },
+            hashtags: { type: 'array', items: str },
+            why: str,
+          },
+        },
+      },
+    },
+  };
+}
+
+export const PLAN_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['items'],
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false, required: ['index', 'idea'],
+        properties: { index: { type: 'integer' }, idea: { type: 'string' } },
+      },
+    },
+  },
+};
 
 function tryParse(s: string): unknown {
   try {
@@ -109,13 +199,17 @@ export class ClaudeAssistant implements ContentAssistant {
     this.client = opts.client ?? new Anthropic({ apiKey: opts.apiKey, timeout: 60_000, maxRetries: 2 });
   }
 
-  private async complete(system: string, user: string, maxTokens: number): Promise<string> {
+  private async complete(system: string, user: string, maxTokens: number, schema?: Record<string, unknown>): Promise<string> {
     const msg = await this.client.messages.create({
       model: this.model,
       max_tokens: maxTokens,
       system,
       messages: [{ role: 'user', content: user }],
+      ...(schema ? { output_config: { format: { type: 'json_schema' as const, schema } } } : {}),
     });
+    if (msg.stop_reason === 'refusal') {
+      throw new DomainError('invalid', 'AI asistent tento požadavek odmítl zpracovat. Upravte prosím brief.');
+    }
     return textOf(msg);
   }
 
@@ -132,6 +226,19 @@ export class ClaudeAssistant implements ContentAssistant {
       .trim();
     if (!out) throw new DomainError('invalid', PARSE_ERROR);
     return out;
+  }
+
+  async concepts(req: ConceptsRequest): Promise<Concept[]> {
+    const { system, user } = buildConceptsPrompt(req);
+    return parseConcepts(await this.complete(system, user, 16000, conceptsSchema(req.networks)), req);
+  }
+
+  /** Termíny, pilíře a formáty počítá kód (planSlots); model jen vymýšlí nápady. */
+  async planMonth(req: PlanRequest): Promise<PlanItem[]> {
+    const slots = planSlots(req);
+    if (!slots.length) return [];
+    const { system, user } = buildPlanPrompt(req, slots);
+    return parsePlanIdeas(await this.complete(system, user, 8000, PLAN_SCHEMA), slots, templatePlan(req));
   }
 
   async summarizeReport(input: ReportSummaryInput, language: Language = 'cs'): Promise<string> {

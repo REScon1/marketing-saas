@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Store } from '../store.js';
-import type { Agency, Brand, Client, Post, PublishJob } from '../types.js';
+import type { Agency, Brand, Client, DesignSpec, Post, PublishJob } from '../types.js';
 
 /**
  * Kontrakt, který musí splnit každá implementace Store (paměť i Postgres).
@@ -73,6 +73,34 @@ export function storeContract(name: string, make: () => Promise<{ store: Store; 
         await store.posts.update(next, f.post.updatedAt);
         await expect(store.posts.update({ ...f.post, title: 'T3' }, f.post.updatedAt)).rejects.toMatchObject({ code: 'conflict' });
         expect((await store.posts.get(f.a.id, f.post.id))?.title).toBe('T2');
+      } finally {
+        await cleanup?.();
+      }
+    });
+
+    it('návrh vizuálu (design) projde tam i zpět beze změny', async () => {
+      const { store, cleanup } = await make();
+      try {
+        const f = await fixture(store);
+        expect((await store.posts.get(f.a.id, f.post.id))?.design).toBeNull();
+        const design: DesignSpec = {
+          format: 'carousel', templateId: 'list', aspect: '4:5', seed: 123456,
+          slides: [
+            { kicker: 'TIP', headline: 'Jak poznat poctivý kvas?', body: 'Tři znaky – „uvozovky“ & emoji 🍞' },
+            { headline: 'Kůrka praská', mediaUrl: 'https://cdn.example/a.jpg' },
+            { headline: 'Uložte si to', mediaUrl: null },
+          ],
+          cta: 'Uložte si to', music: null,
+        };
+        const next = { ...f.post, design, updatedAt: '2026-11-02T09:00:01.000Z' };
+        await store.posts.update(next, f.post.updatedAt);
+        expect((await store.posts.get(f.a.id, f.post.id))?.design).toEqual(design);
+        const reel: DesignSpec = { format: 'reel', templateId: 'gradient', aspect: '9:16', seed: 1, durationSec: 12, slides: [{ headline: 'A' }, { headline: 'B' }] };
+        const p2 = { ...f.post, id: uid(), design: reel };
+        await store.posts.insert(p2);
+        expect((await store.posts.get(f.a.id, p2.id))?.design).toEqual(reel);
+        await store.posts.update({ ...next, design: null, updatedAt: '2026-11-02T09:00:02.000Z' }, next.updatedAt);
+        expect((await store.posts.get(f.a.id, f.post.id))?.design).toBeNull();
       } finally {
         await cleanup?.();
       }

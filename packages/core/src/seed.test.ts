@@ -19,7 +19,17 @@ describe('seed demo', () => {
     expect(by('draft')).toBe(4);
     const client = await s.tenancy.resolveActor(r.personas[2]!.userId, r.agencyId);
     expect((await s.content.pendingApprovals(client)).length).toBe(1);
+    // Většina ukázkových postů má návrh vizuálu (mix formátů) a ty pak nemají starou SVG ilustraci
+    const designed = posts.filter((p) => p.design);
+    expect(designed.length).toBeGreaterThanOrEqual(posts.length - 2);
+    expect(new Set(designed.map((p) => p.design!.format))).toEqual(new Set(['image', 'carousel', 'reel']));
+    expect(designed.every((p) => p.media.length === 0)).toBe(true);
     const brands = await s.catalog.listBrands(owner);
+    const pek = brands.find((b) => b.name === 'Pekárna U Lípy')!;
+    expect(pek.profile).toMatchObject({ color: '#c2410c', secondaryColor: '#3a1d0f', accentColor: '#f5c26b', fontHeading: 'Fraunces', fontBody: 'Onest' });
+    expect(pek.profile.pillars.length).toBeGreaterThanOrEqual(3);
+    expect(brands.find((b) => b.name === 'FitZóna')!.profile).toMatchObject({ fontHeading: 'Unbounded', fontBody: 'DM Sans', accentColor: '#d9f99d' });
+    expect(brands.find((b) => b.name === 'Novák Stavby')!.profile).toMatchObject({ fontHeading: 'Archivo', fontBody: 'Manrope', color: '#1d4ed8' });
     const rep = await s.reports.monthly(owner, brands.find((b) => b.name === 'FitZóna')!.id, '2026-10');
     expect(rep.totals.posts).toBeGreaterThan(0);
     expect(rep.totals.reach).toBeGreaterThan(0);

@@ -195,6 +195,42 @@ describe('Postgres: publikace přes outbox', () => {
   });
 });
 
+describe('Postgres: Studio (návrhy, koncepty, plán)', () => {
+  it('návrh projde Postgresem a jeho změna zruší schválení; veřejný odkaz vidí návrh i brand kit', async () => {
+    const { s, owner, brand, clientActor } = await setup();
+    const design = { format: 'image' as const, templateId: 'bold' as const, aspect: '1:1' as const, slides: [{ kicker: 'NOVINKA', headline: 'Rohlíky' }], seed: 5 };
+    const post = await s.content.createPost(owner, { brandId: brand.id, body: 'Rohlíky', networks: ['facebook'], design });
+    const { approval } = await s.content.submitForApproval(owner, post.id);
+    const view = await s.content.getPublicApproval(approval!.token);
+    expect(view.post.design).toMatchObject({ templateId: 'bold', slides: [{ headline: 'Rohlíky' }] });
+    expect(view.brandProfile).toMatchObject({ bannedWords: ['nejlevnější'], fontBody: 'Onest' });
+    await s.content.decide(clientActor, post.id, 'approved');
+    const edited = await s.content.updatePost(owner, post.id, { design: { ...design, templateId: 'quote' } });
+    expect(edited).toMatchObject({ status: 'draft', version: 2 });
+    expect((await s.content.getPost(owner, post.id)).post.design?.templateId).toBe('quote');
+  });
+
+  it('createFromConcept a bulkCreateFromPlan nad Postgresem (jedna transakce, izolace agentur)', async () => {
+    const { s, owner, brand, clientActor } = await setup();
+    const [c] = await s.ai.concepts(owner, { brandId: brand.id, brief: 'Novinka: žitný chléb se slunečnicí. Vydrží měkký tři dny.', format: 'carousel', networks: ['instagram', 'facebook'], count: 1 });
+    const p = await s.content.createFromConcept(owner, { brandId: brand.id, concept: c! });
+    expect((await s.content.getPost(owner, p.id)).post.design).toEqual(c!.design);
+    const plan = await s.ai.planMonth(owner, { brandId: brand.id, month: '2026-12', postsPerWeek: 3, networks: ['instagram'] });
+    const posts = await s.content.bulkCreateFromPlan(owner, { brandId: brand.id, items: plan });
+    expect(posts).toHaveLength(plan.length);
+    expect((await s.content.listPosts(owner, { brandId: brand.id })).filter((x) => x.design)).toHaveLength(plan.length + 1);
+    // chybná položka => nic se nevytvoří
+    const before = (await s.content.listPosts(owner)).length;
+    await expect(s.content.bulkCreateFromPlan(owner, { brandId: brand.id, items: [plan[0]!, { ...plan[0]!, date: 'x' }] })).rejects.toMatchObject({ code: 'invalid' });
+    expect((await s.content.listPosts(owner)).length).toBe(before);
+    await expect(s.content.bulkCreateFromPlan(clientActor, { brandId: brand.id, items: plan })).rejects.toMatchObject({ code: 'forbidden' });
+    const b = await s.tenancy.registerAgency({ agencyName: 'Konkurence', ownerEmail: 'b@b.cz', ownerName: 'B' });
+    const intruder = await s.tenancy.resolveActor(b.user.id, b.agency.id);
+    await expect(s.ai.concepts(intruder, { brandId: brand.id, brief: 'x', format: 'image', networks: ['instagram'] })).rejects.toMatchObject({ code: 'not_found' });
+    await expect(s.content.createFromConcept(intruder, { brandId: brand.id, concept: c! })).rejects.toMatchObject({ code: 'not_found' });
+  });
+});
+
 describe('Postgres: reporty a seed', () => {
   it('měsíční report sečte metriky publikovaných postů a klient ho vidí', async () => {
     const ctx = await setup();

@@ -105,12 +105,16 @@ describe('schvalování', () => {
 
   it('host schválí přes odkaz; stará verze odkazu po úpravě neplatí', async () => {
     const { s, owner, brand } = await setup();
-    const post = await s.content.createPost(owner, { brandId: brand.id, body: 'v1', networks: ['facebook'] });
+    const design = { format: 'image' as const, templateId: 'bold' as const, aspect: '4:5' as const, slides: [{ kicker: 'NOVINKA', headline: 'Rohlíky od 6:00' }], seed: 7 };
+    const post = await s.content.createPost(owner, { brandId: brand.id, body: 'v1', networks: ['facebook'], design });
     const { approval } = await s.content.submitForApproval(owner, post.id);
     const token = approval!.token;
     const view = await s.content.getPublicApproval(token);
     expect(view.post.body).toBe('v1');
     expect(view.isCurrent).toBe(true);
+    // Klient na odkazu vidí i návrh vizuálu a brand kit pro jeho vykreslení
+    expect(view.post.design).toMatchObject({ format: 'image', templateId: 'bold', slides: [{ headline: 'Rohlíky od 6:00' }] });
+    expect(view.brandProfile).toMatchObject({ color: brand.profile.color, fontHeading: brand.profile.fontHeading, bannedWords: ['nejlevnější'] });
     // agentura mezitím upraví a pošle znovu
     await s.content.updatePost(owner, post.id, { body: 'v2' });
     await expect(s.content.decideByToken(token, { name: 'Jana', decision: 'approved' })).rejects.toMatchObject({ code: 'invalid_transition' });

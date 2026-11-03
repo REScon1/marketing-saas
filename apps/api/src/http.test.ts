@@ -150,6 +150,38 @@ describe('HTTP API', () => {
     expect((await app.inject({ method: 'POST', url: '/api/public/getApproval', headers: json, payload: { args: [ctx.token] }, remoteAddress: '10.0.0.2' })).statusCode).toBe(200);
   });
 
+  it('návrh s obrázky jako data URI se vejde do limitu těla (6 MB); větší tělo -> 413', async () => {
+    const { cookie } = await login('owner@test.cz', 'tajneheslo');
+    const img = `data:image/jpeg;base64,${'A'.repeat(1_400_000)}`;
+    const design = {
+      format: 'carousel', templateId: 'photo', aspect: '4:5', seed: 3,
+      slides: [{ headline: 'Titulní', mediaUrl: img }, { headline: 'Dva', mediaUrl: img }, { headline: 'Tři', mediaUrl: img }],
+    };
+    const r = await rpc(cookie, 'content.createPost', [{ brandId: ctx.brand.id, body: 'Karusel', networks: ['facebook'], design }]);
+    expect(r.statusCode).toBe(200);
+    expect(r.json().result.design.slides).toHaveLength(3);
+    const got = await rpc(cookie, 'content.getPost', [r.json().result.id]);
+    expect(got.json().result.post.design.slides[2].mediaUrl).toBe(img);
+    const huge = { ...design, slides: [...design.slides, ...design.slides] };
+    expect((await rpc(cookie, 'content.createPost', [{ brandId: ctx.brand.id, body: 'x', networks: ['facebook'], design: huge }])).statusCode).toBe(413);
+  });
+
+  it('Studio RPC: koncepty a plán pro tým, klient 403', async () => {
+    const { cookie } = await login('owner@test.cz', 'tajneheslo');
+    const c = await rpc(cookie, 'ai.concepts', [{ brandId: ctx.brand.id, brief: 'Novinka: žitný chléb. Vydrží měkký tři dny.', format: 'reel', networks: ['instagram'], count: 2 }]);
+    expect(c.statusCode).toBe(200);
+    expect(c.json().result).toHaveLength(2);
+    const created = await rpc(cookie, 'content.createFromConcept', [{ brandId: ctx.brand.id, concept: c.json().result[0] }]);
+    expect(created.statusCode).toBe(200);
+    expect(created.json().result.design.format).toBe('reel');
+    const plan = await rpc(cookie, 'ai.planMonth', [{ brandId: ctx.brand.id, month: '2027-01', postsPerWeek: 2, networks: ['instagram'] }]);
+    expect(plan.statusCode).toBe(200);
+    expect(plan.json().result.length).toBeGreaterThan(5);
+    const { cookie: klient } = await login('klient@test.cz', 'klientheslo');
+    expect((await rpc(klient, 'ai.concepts', [{ brandId: ctx.brand.id, brief: 'x', format: 'image', networks: ['instagram'] }])).statusCode).toBe(403);
+    expect((await rpc(klient, 'content.bulkCreateFromPlan', [{ brandId: ctx.brand.id, items: plan.json().result }])).statusCode).toBe(403);
+  });
+
   it('nečekaná chyba -> 500 s obecnou zprávou', async () => {
     const { cookie } = await login('owner@test.cz', 'tajneheslo');
     // content.listPosts s filtrem, který rozbije SQL typ (neplatné datum) -> doménová invalid, ne 500

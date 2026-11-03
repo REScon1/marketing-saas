@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import {
-  conflict, DomainError, notFound,
+  conflict, defaultProfile, DomainError, normalizeProfile, notFound,
   type Agency, type ApprovalRequest, type AuditEvent, type Brand, type Client, type Comment, type Id, type IsoDate,
   type Membership, type Post, type PostFilter, type PostMetrics, type PublishJob, type SocialAccount, type Store, type User,
 } from '@ms/core';
@@ -25,7 +25,8 @@ const toClient = (r: Row): Client => ({
   id: r.id, agencyId: r.agency_id, name: r.name, contactEmail: r.contact_email, archived: r.archived, createdAt: iso(r.created_at),
 });
 const toBrand = (r: Row): Brand => ({
-  id: r.id, agencyId: r.agency_id, clientId: r.client_id, name: r.name, profile: r.profile,
+  // Starší řádky nemají pole brand kitu (JSONB beze změny schématu): doplní se výchozí hodnoty.
+  id: r.id, agencyId: r.agency_id, clientId: r.client_id, name: r.name, profile: normalizeProfile({ ...defaultProfile(), ...r.profile }),
   requiresClientApproval: r.requires_client_approval, archived: r.archived, createdAt: iso(r.created_at),
 });
 const toAccount = (r: Row): SocialAccount => ({
@@ -34,7 +35,7 @@ const toAccount = (r: Row): SocialAccount => ({
 });
 const toPost = (r: Row): Post => ({
   id: r.id, agencyId: r.agency_id, brandId: r.brand_id, clientId: r.client_id, title: r.title, body: r.body,
-  overrides: r.overrides, networks: r.networks, media: r.media, status: r.status, scheduledAt: isoOrNull(r.scheduled_at),
+  overrides: r.overrides, networks: r.networks, media: r.media, design: r.design ?? null, status: r.status, scheduledAt: isoOrNull(r.scheduled_at),
   publishedAt: isoOrNull(r.published_at), version: r.version, versions: r.versions, aiAssisted: r.ai_assisted,
   createdBy: r.created_by, createdAt: iso(r.created_at), updatedAt: iso(r.updated_at),
 });
@@ -248,6 +249,7 @@ export class PgStore implements Store {
     return [
       p.id, p.agencyId, p.brandId, p.clientId, p.title, p.body, json(p.overrides), p.networks, json(p.media), p.status,
       p.scheduledAt, p.publishedAt, p.version, json(p.versions), p.aiAssisted, p.createdBy, p.createdAt, p.updatedAt,
+      p.design ? json(p.design) : null,
     ];
   }
 
@@ -270,8 +272,8 @@ export class PgStore implements Store {
     insert: async (p: Post) => {
       await this.exec(
         `insert into posts (id, agency_id, brand_id, client_id, title, body, overrides, networks, media, status,
-           scheduled_at, published_at, version, versions, ai_assisted, created_by, created_at, updated_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+           scheduled_at, published_at, version, versions, ai_assisted, created_by, created_at, updated_at, design)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
         this.postParams(p),
       );
     },
@@ -279,8 +281,8 @@ export class PgStore implements Store {
       const n = await this.exec(
         `update posts set brand_id = $3, client_id = $4, title = $5, body = $6, overrides = $7, networks = $8, media = $9,
            status = $10, scheduled_at = $11, published_at = $12, version = $13, versions = $14, ai_assisted = $15,
-           created_by = $16, created_at = $17, updated_at = $18
-         where id = $1 and agency_id = $2 and updated_at = $19::timestamptz`,
+           created_by = $16, created_at = $17, updated_at = $18, design = $19
+         where id = $1 and agency_id = $2 and updated_at = $20::timestamptz`,
         [...this.postParams(p), expectedUpdatedAt],
       );
       if (n === 0) {

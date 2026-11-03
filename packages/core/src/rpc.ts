@@ -28,6 +28,8 @@ export const ACTOR_METHODS = {
   'content.getPost': (s: S) => s.content.getPost,
   'content.createPost': (s: S) => s.content.createPost,
   'content.updatePost': (s: S) => s.content.updatePost,
+  'content.createFromConcept': (s: S) => s.content.createFromConcept,
+  'content.bulkCreateFromPlan': (s: S) => s.content.bulkCreateFromPlan,
   'content.submitForApproval': (s: S) => s.content.submitForApproval,
   'content.decide': (s: S) => s.content.decide,
   'content.addComment': (s: S) => s.content.addComment,
@@ -41,6 +43,8 @@ export const ACTOR_METHODS = {
   'ai.info': (s: S) => s.ai.info,
   'ai.draft': (s: S) => s.ai.draft,
   'ai.rewrite': (s: S) => s.ai.rewrite,
+  'ai.concepts': (s: S) => s.ai.concepts,
+  'ai.planMonth': (s: S) => s.ai.planMonth,
 } as const;
 
 export const PUBLIC_METHODS = {

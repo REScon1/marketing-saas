@@ -2,6 +2,8 @@ import {
   brandCheck, hasBlockingIssues, textForNetwork,
   type BrandIssue, type ContentAssistant, type DraftVariant,
 } from './assistant.js';
+import { coerceConcept, MAX_CONCEPTS, type Concept, type PlanItem } from './concepts.js';
+import { validDesign } from './design.js';
 import { conflict, DomainError, forbidden, invalid, notFound } from './errors.js';
 import {
   assertCanDecide, assertCanSeeBrand, assertCanSeeClient, assertCanSeePost, assertOwner, assertStaff,
@@ -10,10 +12,10 @@ import {
 import type { MetricsProvider, SocialPublisher } from './publisher.js';
 import type { PostFilter, Store } from './store.js';
 import type {
-  Actor, Agency, ApprovalRequest, AuditEvent, Brand, BrandProfile, Client, Comment, Id, Language,
-  MediaRef, Membership, Network, Post, PostMetrics, PostStatus, PublishJob, Role, SocialAccount, User,
+  Actor, Agency, ApprovalRequest, AuditEvent, Brand, BrandProfile, Client, Comment, DesignSpec, Id, Language,
+  MediaRef, Membership, Network, Post, PostFormat, PostMetrics, PostStatus, PublishJob, Role, SocialAccount, User,
 } from './types.js';
-import { FONTS, NETWORKS, NETWORK_LIMITS } from './types.js';
+import { FONTS, NETWORKS, NETWORK_LIMITS, POST_FORMATS } from './types.js';
 
 export interface Deps {
   store: Store;
@@ -92,8 +94,10 @@ export interface PublicApprovalView {
   agencyName: string;
   brandName: string;
   brandColor: string;
+  /** Celý brand kit (barvy, fonty, logo, tón) – kvůli vykreslení návrhu. Neobsahuje nic tajného. */
+  brandProfile: BrandProfile;
   clientName: string;
-  post: Pick<Post, 'id' | 'title' | 'body' | 'overrides' | 'networks' | 'media' | 'scheduledAt' | 'version'>;
+  post: Pick<Post, 'id' | 'title' | 'body' | 'overrides' | 'networks' | 'media' | 'design' | 'scheduledAt' | 'version'>;
   approval: Pick<ApprovalRequest, 'status' | 'expiresAt' | 'decidedAt' | 'decidedByName' | 'note' | 'postVersion'>;
   comments: Pick<Comment, 'authorName' | 'authorRole' | 'body' | 'createdAt'>[];
   isCurrent: boolean;
@@ -174,6 +178,32 @@ export function createServices(deps: Deps) {
         await s.publishJobs.update({ ...j, status: 'cancelled', lastError: reason, updatedAt: nowIso() });
       }
     }
+  }
+
+  async function insertDraft(s: Store, actor: Actor, brand: Brand, input: DraftInput): Promise<Post> {
+    const networks = validNetworks(input.networks ?? []);
+    const body = typeof input.body === 'string' ? input.body : '';
+    const now = nowIso();
+    const p: Post = {
+      id: newId(), agencyId: actor.agencyId, brandId: brand.id, clientId: brand.clientId,
+      title: (input.title ?? '').trim().slice(0, 120) || firstLine(body) || 'Nový post',
+      body, overrides: cleanOverrides(input.overrides, networks), networks, media: validMedia(input.media),
+      design: input.design === undefined || input.design === null ? null : validDesign(input.design),
+      status: 'draft', scheduledAt: validDate(input.scheduledAt), publishedAt: null,
+      version: 1, versions: [{ n: 1, body, networks, createdAt: now, createdBy: actor.userId }],
+      aiAssisted: !!input.aiAssisted, createdBy: actor.userId, createdAt: now, updatedAt: now,
+    };
+    await s.posts.insert(p);
+    await audit(s, actor.agencyId, actor, 'post.created', 'post', p.id, { brandId: brand.id });
+    return p;
+  }
+
+  /** Sítě pro AI: zadané, jinak připojené účty značky, jinak Instagram + Facebook. */
+  async function defaultNetworks(actor: Actor, brandId: Id, requested?: Network[]): Promise<Network[]> {
+    if (requested?.length) return validNetworks(requested);
+    const connected = (await store.accounts.list(actor.agencyId, { brandId })).filter((a) => a.status === 'connected').map((a) => a.network);
+    const ordered = NETWORKS.filter((n) => connected.includes(n));
+    return ordered.length ? ordered : ['instagram', 'facebook'];
   }
 
   // =================== Identita a tenancy ===================
@@ -427,33 +457,64 @@ export function createServices(deps: Deps) {
       };
     },
 
-    async createPost(actor: Actor, input: {
-      brandId: Id; title?: string; body?: string; networks?: Network[]; scheduledAt?: string | null;
-      media?: MediaRef[]; aiAssisted?: boolean; overrides?: Partial<Record<Network, string>>;
-    }) {
+    async createPost(actor: Actor, input: CreatePostInput) {
       assertStaff(actor);
       return store.tx(async (s) => {
         const brand = await loadBrand(s, actor, input.brandId);
-        const networks = validNetworks(input.networks ?? []);
-        const body = typeof input.body === 'string' ? input.body : '';
-        const now = nowIso();
-        const p: Post = {
-          id: newId(), agencyId: actor.agencyId, brandId: brand.id, clientId: brand.clientId,
-          title: (input.title ?? '').trim().slice(0, 120) || firstLine(body) || 'Nový post',
-          body, overrides: cleanOverrides(input.overrides, networks), networks, media: validMedia(input.media), design: null,
-          status: 'draft', scheduledAt: validDate(input.scheduledAt), publishedAt: null,
-          version: 1, versions: [{ n: 1, body, networks, createdAt: now, createdBy: actor.userId }],
-          aiAssisted: !!input.aiAssisted, createdBy: actor.userId, createdAt: now, updatedAt: now,
-        };
-        await s.posts.insert(p);
-        await audit(s, actor.agencyId, actor, 'post.created', 'post', p.id, { brandId: brand.id });
+        return insertDraft(s, actor, brand, input);
+      });
+    },
+
+    /** Z konceptu (ai.concepts) vytvoří koncept postu s návrhem vizuálu a texty pro sítě. */
+    async createFromConcept(actor: Actor, input: { brandId: Id; concept: Concept; scheduledAt?: string | null }) {
+      assertStaff(actor);
+      return store.tx(async (s) => {
+        const brand = await loadBrand(s, actor, input.brandId);
+        const p = await insertDraft(s, actor, brand, draftFromConcept(input.concept, input.scheduledAt));
+        await audit(s, actor.agencyId, actor, 'post.created_from_concept', 'post', p.id, { angle: input.concept?.angle ?? null });
         return p;
+      });
+    },
+
+    /**
+     * Z měsíčního plánu vytvoří koncepty postů s návrhem (pro každou položku jeden koncept z TemplateAssistant/AI).
+     * Generování proběhne předem (AI volání nesmí držet transakci), zápis všech postů je v jedné transakci.
+     */
+    async bulkCreateFromPlan(actor: Actor, input: {
+      brandId: Id; items: Pick<PlanItem, 'date' | 'idea' | 'format'>[]; networks?: Network[]; language?: Language;
+    }) {
+      assertStaff(actor);
+      if (!Array.isArray(input.items) || input.items.length === 0) throw invalid('Plán je prázdný', { field: 'items' });
+      if (input.items.length > MAX_PLAN_ITEMS) throw invalid(`Najednou jde vytvořit nejvýš ${MAX_PLAN_ITEMS} postů`, { field: 'items' });
+      const brand = await loadBrand(store, actor, input.brandId);
+      const client = await store.clients.get(actor.agencyId, brand.clientId);
+      const items = input.items.map((it, i) => ({
+        idea: requireText(it?.idea, `nápad ${i + 1}`, 300),
+        format: validFormat(it?.format),
+        date: validDate(it?.date) ?? (() => { throw invalid('Položka plánu nemá platné datum', { field: 'items' }); })(),
+      }));
+      const networks = await defaultNetworks(actor, brand.id, input.networks);
+      const language = input.language ?? brand.profile.languages[0] ?? 'cs';
+      const drafts = await mapLimit(items, 4, async (it) => {
+        const [concept] = await deps.assistant.concepts({
+          brand, clientName: client?.name ?? '', brief: it.idea, format: it.format, networks, language, count: 1,
+        });
+        if (!concept) throw invalid(`K nápadu „${it.idea}“ se nepodařilo vytvořit koncept`);
+        const valid = coerceConcept(concept, { brand, format: it.format, networks, brief: it.idea }) ?? concept;
+        return { ...draftFromConcept(valid, it.date), title: it.idea.slice(0, 120) };
+      });
+      return store.tx(async (s) => {
+        const b = await loadBrand(s, actor, brand.id);
+        const out: Post[] = [];
+        for (const d of drafts) out.push(await insertDraft(s, actor, b, d));
+        await audit(s, actor.agencyId, actor, 'post.bulk_from_plan', 'brand', b.id, { count: out.length });
+        return out;
       });
     },
 
     async updatePost(actor: Actor, id: Id, patch: {
       title?: string; body?: string; networks?: Network[]; overrides?: Partial<Record<Network, string>>;
-      scheduledAt?: string | null; media?: MediaRef[]; aiAssisted?: boolean;
+      scheduledAt?: string | null; media?: MediaRef[]; aiAssisted?: boolean; design?: DesignSpec | null;
     }, expectedUpdatedAt?: string) {
       assertStaff(actor);
       return store.tx(async (s) => {
@@ -470,6 +531,7 @@ export function createServices(deps: Deps) {
           after.overrides = cleanOverrides(patch.overrides ?? before.overrides, after.networks);
         }
         if (patch.media !== undefined) after.media = validMedia(patch.media);
+        if (patch.design !== undefined) after.design = patch.design === null ? null : validDesign(patch.design);
         if (patch.aiAssisted) after.aiAssisted = true;
         if (patch.scheduledAt !== undefined) after.scheduledAt = validDate(patch.scheduledAt);
 
@@ -477,7 +539,8 @@ export function createServices(deps: Deps) {
           after.body !== before.body ||
           JSON.stringify(after.networks) !== JSON.stringify(before.networks) ||
           JSON.stringify(after.overrides) !== JSON.stringify(before.overrides) ||
-          JSON.stringify(after.media) !== JSON.stringify(before.media);
+          JSON.stringify(after.media) !== JSON.stringify(before.media) ||
+          JSON.stringify(after.design ?? null) !== JSON.stringify(before.design ?? null);
 
         if (contentChanged) {
           after.version = before.version + 1;
@@ -562,10 +625,11 @@ export function createServices(deps: Deps) {
       if (!brand || !client) throw notFound('Značka');
       const comments = await store.comments.list(a.agencyId, post.id);
       return {
-        agencyName: agency.name, brandName: brand.name, brandColor: brand.profile.color, clientName: client.name,
+        agencyName: agency.name, brandName: brand.name, brandColor: brand.profile.color,
+        brandProfile: normalizeProfile({ ...defaultProfile(), ...brand.profile }), clientName: client.name,
         post: {
           id: post.id, title: post.title, body: post.body, overrides: post.overrides, networks: post.networks,
-          media: post.media, scheduledAt: post.scheduledAt, version: post.version,
+          media: post.media, design: post.design ?? null, scheduledAt: post.scheduledAt, version: post.version,
         },
         approval: {
           status: a.status === 'pending' && a.expiresAt < nowIso() ? 'superseded' : a.status,
@@ -973,12 +1037,96 @@ export function createServices(deps: Deps) {
       });
       return { body, issues: brandCheck({ body, networks: ['facebook', 'instagram', 'linkedin'] }, brand.profile) };
     },
+
+    /** Hotové koncepty postu (háček, návrh vizuálu, popisky). Ke každému popisku kontrola značky. */
+    async concepts(actor: Actor, input: { brandId: Id; brief: string; format: PostFormat; networks: Network[]; count?: number; language?: Language }) {
+      assertStaff(actor);
+      const brand = await loadBrand(store, actor, input.brandId);
+      const client = await store.clients.get(actor.agencyId, brand.clientId);
+      const brief = requireText(input.brief, 'brief', 4000);
+      const format = validFormat(input.format);
+      const networks = await defaultNetworks(actor, brand.id, input.networks);
+      const language = input.language ?? brand.profile.languages[0] ?? 'cs';
+      const count = Math.min(Math.max(Math.round(Number(input.count) || 3), 1), MAX_CONCEPTS);
+      const raw = await deps.assistant.concepts({ brand, clientName: client?.name ?? '', brief, format, networks, language, count });
+      // Pojistka i pro cizí implementace asistenta: návrh musí projít validDesign.
+      const concepts = raw
+        .map((c, i) => coerceConcept(c, { brand, format, networks, brief }, i))
+        .filter((c): c is Concept => !!c)
+        .slice(0, count);
+      await audit(store, actor.agencyId, actor, 'ai.concepts', 'brand', brand.id, { assistant: deps.assistant.label, format, count: concepts.length });
+      return concepts.map((c) => ({ ...c, issues: conceptIssues(c, brand.profile) }));
+    },
+
+    /** Měsíční plán: termíny (Europe/Prague), pilíře, formáty a konkrétní nápady. */
+    async planMonth(actor: Actor, input: { brandId: Id; month: string; postsPerWeek: number; networks: Network[]; formats?: PostFormat[] }) {
+      assertStaff(actor);
+      const brand = await loadBrand(store, actor, input.brandId);
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(input.month))) throw invalid('Měsíc musí být ve tvaru RRRR-MM', { field: 'month' });
+      const perWeek = Number(input.postsPerWeek);
+      if (!Number.isInteger(perWeek) || perWeek < 2 || perWeek > 7) throw invalid('Počet postů týdně musí být 2–7', { field: 'postsPerWeek' });
+      const formats = input.formats === undefined || input.formats === null ? undefined : [...new Set(input.formats.map(validFormat))];
+      const networks = await defaultNetworks(actor, brand.id, input.networks);
+      const items = await deps.assistant.planMonth({ brand, month: input.month, postsPerWeek: perWeek, networks, formats, now: nowIso() });
+      await audit(store, actor.agencyId, actor, 'ai.plan_month', 'brand', brand.id, { month: input.month, items: items.length });
+      return items;
+    },
   };
 
   return { tenancy, catalog, content, publishing, reports, ai, deps };
 }
 
 export type Services = ReturnType<typeof createServices>;
+
+export const MAX_PLAN_ITEMS = 31;
+
+interface CreatePostInput {
+  brandId: Id; title?: string; body?: string; networks?: Network[]; scheduledAt?: string | null;
+  media?: MediaRef[]; aiAssisted?: boolean; overrides?: Partial<Record<Network, string>>; design?: DesignSpec | null;
+}
+type DraftInput = Omit<CreatePostInput, 'brandId'>;
+
+function validFormat(v: unknown): PostFormat {
+  if (!POST_FORMATS.includes(v as PostFormat)) throw invalid('Neznámý formát postu', { field: 'format' });
+  return v as PostFormat;
+}
+
+/** Koncept → vstup pro koncept postu: body = popisek první sítě, ostatní sítě jako overrides, titulek = háček. */
+function draftFromConcept(concept: Concept, scheduledAt?: string | null): DraftInput {
+  if (!concept || typeof concept !== 'object') throw invalid('Chybí koncept', { field: 'concept' });
+  const caps = (concept.captions ?? {}) as Partial<Record<Network, unknown>>;
+  const networks = (Object.keys(caps) as Network[]).filter((n) => NETWORKS.includes(n) && typeof caps[n] === 'string' && (caps[n] as string).trim());
+  if (!networks.length) throw invalid('Koncept nemá žádný popisek pro sítě', { field: 'concept.captions' });
+  const body = caps[networks[0]!] as string;
+  const overrides: Partial<Record<Network, string>> = {};
+  for (const n of networks.slice(1)) if (caps[n] !== body) overrides[n] = caps[n] as string;
+  const hook = typeof concept.hook === 'string' ? concept.hook.trim() : '';
+  // Titulek = háček; dvouvětý háček zkrátí na první větu, když se vejde.
+  const firstSentence = hook.split(/(?<=[.!?])\s+(?=[A-ZÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ„])/)[0] ?? hook;
+  return {
+    title: (hook.length > 80 && firstSentence.length >= 12 ? firstSentence : hook).slice(0, 120), body, networks, overrides, design: validDesign(concept.design),
+    scheduledAt: scheduledAt ?? null, aiAssisted: true,
+  };
+}
+
+/** Kontrola značky pro každý popisek zvlášť; každá chyba nese síť, ke které patří. */
+function conceptIssues(c: Concept, profile: BrandProfile): BrandIssue[] {
+  return (Object.entries(c.captions) as [Network, string][]).flatMap(([n, text]) =>
+    brandCheck({ body: text, networks: [n] }, profile).map((i) => ({ ...i, network: n })));
+}
+
+async function mapLimit<T, R>(items: T[], limit: number, fn: (x: T, i: number) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]!, i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
 
 const ALL_STATUSES: PostStatus[] = ['draft', 'in_review', 'changes_requested', 'approved', 'scheduled', 'publishing', 'published', 'failed'];
 
@@ -1034,7 +1182,7 @@ function cleanOverrides(o: Partial<Record<Network, string>> | undefined, network
   return out;
 }
 
-function normalizeProfile(p: BrandProfile): BrandProfile {
+export function normalizeProfile(p: BrandProfile): BrandProfile {
   const list = (v: unknown, max: number) =>
     (Array.isArray(v) ? v : []).map((x) => String(x).trim()).filter(Boolean).slice(0, max);
   const langs = list(p.languages, 3).filter((l): l is Language => ['cs', 'sk', 'en'].includes(l));

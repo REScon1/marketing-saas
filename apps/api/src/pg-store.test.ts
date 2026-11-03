@@ -1,3 +1,4 @@
+import { defaultProfile } from '@ms/core';
 import { storeContract } from '@ms/core/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeTestDb } from './testing/pg.js';
@@ -29,12 +30,12 @@ describe('PgStore: specifika Postgresu', () => {
     await s.clients.insert(c);
     const b = {
       id: uid(), agencyId: a.id, clientId: c.id, name: 'B', requiresClientApproval: true, archived: false, createdAt: now,
-      profile: { tone: 't', audience: '', bannedWords: ['x'], examples: [], defaultHashtags: ['#a'], maxHashtags: 3, languages: ['cs' as const], emoji: 'few' as const, color: '#000000' },
+      profile: { ...defaultProfile(), tone: 't', bannedWords: ['x'], defaultHashtags: ['#a'], color: '#000000', pillars: ['Tipy'], website: 'https://b.example' },
     };
     await s.brands.insert(b);
     const p = {
       id: uid(), agencyId: a.id, brandId: b.id, clientId: c.id, title: 'T', body: 'B', overrides: { instagram: 'IG' }, networks: ['facebook' as const, 'instagram' as const],
-      media: [{ id: 'm1', kind: 'image' as const, url: 'https://x.example/a.png', alt: 'alt' }], status: 'draft' as const, scheduledAt: null, publishedAt: null, version: 1,
+      media: [{ id: 'm1', kind: 'image' as const, url: 'https://x.example/a.png', alt: 'alt' }], design: null, status: 'draft' as const, scheduledAt: null, publishedAt: null, version: 1,
       versions: [{ n: 1, body: 'B', networks: ['facebook' as const], createdAt: now, createdBy: 'u' }], aiAssisted: true, createdBy: 'u', createdAt: now, updatedAt: now,
     };
     await s.posts.insert(p);

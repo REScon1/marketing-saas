@@ -3,6 +3,8 @@ export * from './errors.js';
 export * from './store.js';
 export * from './memory-store.js';
 export * from './policy.js';
+export * from './design.js';
+export * from './concepts.js';
 export * from './assistant.js';
 export * from './publisher.js';
 export * from './services.js';

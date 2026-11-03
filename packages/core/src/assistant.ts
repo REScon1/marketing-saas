@@ -1,5 +1,10 @@
+import {
+  ANGLE_LABELS, derivePillars, templateConcepts, templatePlan,
+  type Concept, type ConceptsRequest, type PlanItem, type PlanRequest, type PlanSlot,
+} from './concepts.js';
+import { SLIDE_RANGE } from './design.js';
 import type { Brand, BrandProfile, Language, Network } from './types.js';
-import { NETWORK_LIMITS } from './types.js';
+import { NETWORK_LIMITS, TEMPLATE_IDS } from './types.js';
 
 // ---------- Kontrola proti brand profilu (deterministická, bez AI) ----------
 
@@ -106,6 +111,10 @@ export interface ContentAssistant {
   draft(req: DraftRequest): Promise<DraftVariant[]>;
   rewrite(req: { brand: Brand; body: string; instruction: string; language: Language }): Promise<string>;
   summarizeReport(input: ReportSummaryInput, language: Language): Promise<string>;
+  /** Hotové koncepty postu (háček, návrh vizuálu, popisky pro sítě). */
+  concepts(req: ConceptsRequest): Promise<Concept[]>;
+  /** Měsíční plán: termíny (Europe/Prague), pilíř, formát a konkrétní nápad. */
+  planMonth(req: PlanRequest): Promise<PlanItem[]>;
 }
 
 // ---------- Prompty pro LLM (sdílené, testovatelné) ----------
@@ -161,6 +170,70 @@ export function buildRewritePrompt(req: { brand: Brand; body: string; instructio
   };
 }
 
+const NETWORK_STYLE: Record<Network, string> = {
+  instagram: 'Instagram: kratší, vzdušný text s odřádkováním, výzva na konci, hashtagy na samostatném řádku na konci.',
+  facebook: 'Facebook: konverzační tón, 2–4 krátké odstavce, výzva s odkazem (pokud značka nemá web, napiš zástupný text [odkaz]).',
+  linkedin: 'LinkedIn: profesionálnější, 3–4 krátké odstavce, věcně, bez přehnaných emoji.',
+};
+
+const FORMAT_RULES = {
+  image: 'Grafika: přesně 1 slide (kicker = krátký nadtitulek, headline = hlavní sdělení do 70 znaků, body = doplnění do 160 znaků).',
+  carousel: 'Karusel: 4–7 slidů v logické posloupnosti – titulní slide (kicker + headline), 2–5 obsahových slidů (číslované tipy/kroky/fakta z briefu), závěrečný slide s výzvou k akci.',
+  reel: 'Reel: 3–5 scén po 2–4 sekundách; text na obrazovce velmi krátký (do 45 znaků na scénu); první scéna je háček, poslední výzva. Popisek je samostatně v captions.',
+  story: 'Story: 3–5 scén po 2–4 sekundách, text na obrazovce velmi krátký (do 45 znaků), poslední scéna s výzvou.',
+} as const;
+
+/** Prompt pro koncepty. Kontrakt výstupu je JSON {"concepts":[…]} (viz CONCEPTS_OUTPUT v API adaptéru). */
+export function buildConceptsPrompt(req: ConceptsRequest): { system: string; user: string } {
+  const range = SLIDE_RANGE[req.format];
+  const system = [
+    'Jsi kreativní ředitel a copywriter české marketingové agentury. Navrhuješ hotové posty na sociální sítě: háček, texty grafiky a popisky pro jednotlivé sítě – přesně v hlasu značky.',
+    'Píšeš přirozenou češtinou bez klišé a bez prázdných frází (např. „Co z toho máte vy?“, „Neváhejte“, „To nejlepší pro vás“).',
+    'Nevymýšlíš fakta: ceny, data, čísla, citace zákazníků ani jména, která nejsou v briefu. Když něco chybí, napiš to obecně nebo použij zástupný text v hranatých závorkách.',
+    'Výsledek vždy projde schválením člověkem; nic nepublikuješ.',
+  ].join(' ');
+  const user = [
+    brandContext(req.brand, req.clientName),
+    req.brand.profile.pillars.length ? `Pilíře obsahu: ${req.brand.profile.pillars.join(', ')}` : '',
+    req.brand.profile.website ? `Web značky: ${req.brand.profile.website}` : 'Web značky: není (v odkazu použij [odkaz])',
+    '',
+    `Brief od manažera:\n<brief>\n${req.brief}\n</brief>`,
+    '',
+    `Navrhni ${req.count} odlišné koncepty v ${LANG_NAME[req.language]} ve formátu „${req.format}“.`,
+    FORMAT_RULES[req.format],
+    `Počet slidů/scén: ${range.min}–${range.max}. Limity: kicker do 30 znaků, headline do 70 znaků, body do 160 znaků, cta do 40 znaků.`,
+    `Každý koncept ať má jiný úhel – vyber z: ${Object.values(ANGLE_LABELS).join(', ')}.`,
+    'Háček (hook) je první věta popisku: silná, konkrétní, do 90 znaků.',
+    `Popisky (captions) napiš pro sítě: ${req.networks.map((n) => NETWORK_LIMITS[n].label).join(', ')}.`,
+    ...req.networks.map((n) => `- ${NETWORK_STYLE[n]}`),
+    `Šablona (templateId) jedna z: ${TEMPLATE_IDS.join(', ')} – list pro tipy v karuselu, bold pro nabídky, quote pro citace, photo/split pokud brief zmiňuje fotky, jinak editorial/gradient/minimal.`,
+    'why = jedna česká věta, proč koncept funguje.',
+    'Odpověz pouze JSON ve tvaru {"concepts":[{"angle":"…","hook":"…","templateId":"…","slides":[{"kicker":"…","headline":"…","body":"…"}],"cta":"…","durationSec":12,"captions":{"instagram":"…"},"hashtags":["#…"],"why":"…"}]}.',
+  ].filter((l) => l !== '').join('\n');
+  return { system, user };
+}
+
+/** Prompt pro nápady do měsíčního plánu. Termíny, pilíře a formáty určuje kód, model doplní jen nápady. */
+export function buildPlanPrompt(req: PlanRequest, slots: PlanSlot[]): { system: string; user: string } {
+  const system = [
+    'Jsi stratég obsahu české marketingové agentury. Vymýšlíš konkrétní, pestré nápady na posty, které sedí značce, pilíři i formátu.',
+    'Nápady nesmí vymýšlet fakta (ceny, data akcí, jména), která o značce nevíš. Žádná klišé.',
+  ].join(' ');
+  const pillars = derivePillars(req.brand.profile);
+  const user = [
+    brandContext(req.brand, ''),
+    `Pilíře obsahu: ${pillars.join(', ')}`,
+    `Měsíc: ${req.month}`,
+    '',
+    'Rozvrh (index, datum a čas, pilíř, formát):',
+    ...slots.map((s, i) => `${i}. ${s.date} | ${s.pillar} | ${s.format}`),
+    '',
+    'Ke každé položce rozvrhu napiš jeden konkrétní nápad v češtině jako krátký titulek (do 100 znaků). Nápady se nesmí opakovat.',
+    'Odpověz pouze JSON ve tvaru {"items":[{"index":0,"idea":"…"}]} se všemi indexy rozvrhu.',
+  ].join('\n');
+  return { system, user };
+}
+
 // ---------- Demo asistent bez AI ----------
 
 const fmtPct = (x: number) => `${(x * 100).toFixed(1).replace('.', ',')} %`;
@@ -189,7 +262,7 @@ export class TemplateAssistant implements ContentAssistant {
     const variants: DraftVariant[] = [
       {
         angle: 'Benefit na první řádek',
-        body: end(`${core}.${pickEmoji(p, 0)}\n\nCo z toho máte vy? Méně starostí a víc času na to podstatné. Podrobnosti najdete v odkazu.`),
+        body: end(`${core}.${pickEmoji(p, 0)}\n\nPodrobnosti najdete v odkazu.`),
       },
       {
         angle: 'Otázka na publikum',
@@ -228,5 +301,13 @@ export class TemplateAssistant implements ContentAssistant {
     if (r.topPostTitle) parts.push(`Nejlépe fungoval post „${r.topPostTitle}“.`);
     if (r.bestNetwork) parts.push(`Nejsilnější síť: ${r.bestNetwork}.`);
     return parts.join(' ');
+  }
+
+  async concepts(req: ConceptsRequest): Promise<Concept[]> {
+    return templateConcepts(req);
+  }
+
+  async planMonth(req: PlanRequest): Promise<PlanItem[]> {
+    return templatePlan(req);
   }
 }
