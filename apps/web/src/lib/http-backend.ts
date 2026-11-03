@@ -27,7 +27,8 @@ export class HttpBackend implements Backend {
     const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
     if (res.status === 401) return null;
     if (!res.ok) throw new Error('Server není dostupný');
-    return res.json();
+    const json = await res.json();
+    return (json.result ?? json) as Me;
   }
 
   login(email: string, password: string) {
