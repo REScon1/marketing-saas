@@ -13,7 +13,7 @@ import type {
   Actor, Agency, ApprovalRequest, AuditEvent, Brand, BrandProfile, Client, Comment, Id, Language,
   MediaRef, Membership, Network, Post, PostMetrics, PostStatus, PublishJob, Role, SocialAccount, User,
 } from './types.js';
-import { NETWORKS, NETWORK_LIMITS } from './types.js';
+import { FONTS, NETWORKS, NETWORK_LIMITS } from './types.js';
 
 export interface Deps {
   store: Store;
@@ -39,6 +39,13 @@ export const defaultProfile = (): BrandProfile => ({
   languages: ['cs'],
   emoji: 'few',
   color: '#3b5bdb',
+  secondaryColor: '#111513',
+  accentColor: '#f3c33f',
+  logoUrl: null,
+  fontHeading: 'Bricolage Grotesque',
+  fontBody: 'Onest',
+  pillars: [],
+  website: null,
 });
 
 const EDITABLE: PostStatus[] = ['draft', 'in_review', 'changes_requested', 'approved', 'scheduled', 'failed'];
@@ -433,7 +440,7 @@ export function createServices(deps: Deps) {
         const p: Post = {
           id: newId(), agencyId: actor.agencyId, brandId: brand.id, clientId: brand.clientId,
           title: (input.title ?? '').trim().slice(0, 120) || firstLine(body) || 'Nový post',
-          body, overrides: cleanOverrides(input.overrides, networks), networks, media: validMedia(input.media),
+          body, overrides: cleanOverrides(input.overrides, networks), networks, media: validMedia(input.media), design: null,
           status: 'draft', scheduledAt: validDate(input.scheduledAt), publishedAt: null,
           version: 1, versions: [{ n: 1, body, networks, createdAt: now, createdBy: actor.userId }],
           aiAssisted: !!input.aiAssisted, createdBy: actor.userId, createdAt: now, updatedAt: now,
@@ -1041,5 +1048,12 @@ function normalizeProfile(p: BrandProfile): BrandProfile {
     languages: langs.length ? langs : ['cs'],
     emoji: ['none', 'few', 'many'].includes(p.emoji) ? p.emoji : 'few',
     color: /^#[0-9a-fA-F]{6}$/.test(p.color) ? p.color : '#3b5bdb',
+    secondaryColor: /^#[0-9a-fA-F]{6}$/.test(p.secondaryColor) ? p.secondaryColor : '#111513',
+    accentColor: /^#[0-9a-fA-F]{6}$/.test(p.accentColor) ? p.accentColor : '#f3c33f',
+    logoUrl: typeof p.logoUrl === 'string' && (/^data:image\//.test(p.logoUrl) || /^https:\/\//.test(p.logoUrl)) && p.logoUrl.length < 600_000 ? p.logoUrl : null,
+    fontHeading: (FONTS as readonly string[]).includes(p.fontHeading) ? p.fontHeading : 'Bricolage Grotesque',
+    fontBody: (FONTS as readonly string[]).includes(p.fontBody) ? p.fontBody : 'Onest',
+    pillars: list(p.pillars, 8).map((x) => x.slice(0, 80)),
+    website: typeof p.website === 'string' && /^https?:\/\//.test(p.website) ? p.website.slice(0, 300) : null,
   };
 }

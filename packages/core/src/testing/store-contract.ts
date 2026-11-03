@@ -20,12 +20,12 @@ export function storeContract(name: string, make: () => Promise<{ store: Store; 
     await store.clients.insert(client);
     const brand: Brand = {
       id: uid(), agencyId: a.id, clientId: client.id, name: 'Značka A', requiresClientApproval: true, archived: false, createdAt: now,
-      profile: { tone: '', audience: '', bannedWords: [], examples: [], defaultHashtags: [], maxHashtags: 3, languages: ['cs'], emoji: 'few', color: '#3b5bdb' },
+      profile: { tone: '', audience: '', bannedWords: [], examples: [], defaultHashtags: [], maxHashtags: 3, languages: ['cs'], emoji: 'few', color: '#3b5bdb', secondaryColor: '#111111', accentColor: '#ffcc00', logoUrl: null, fontHeading: 'Onest', fontBody: 'Onest', pillars: [], website: null },
     };
     await store.brands.insert(brand);
     const post: Post = {
       id: uid(), agencyId: a.id, brandId: brand.id, clientId: client.id, title: 'T', body: 'B', overrides: {}, networks: ['facebook'],
-      media: [], status: 'draft', scheduledAt: '2026-11-10T10:00:00.000Z', publishedAt: null, version: 1,
+      media: [], design: null, status: 'draft', scheduledAt: '2026-11-10T10:00:00.000Z', publishedAt: null, version: 1,
       versions: [{ n: 1, body: 'B', networks: ['facebook'], createdAt: now, createdBy: uid() }], aiAssisted: false,
       createdBy: uid(), createdAt: now, updatedAt: now,
     };

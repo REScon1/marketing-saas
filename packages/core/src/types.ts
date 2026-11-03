@@ -43,6 +43,43 @@ export interface Client {
   createdAt: IsoDate;
 }
 
+export type PostFormat = 'image' | 'carousel' | 'reel' | 'story';
+export const POST_FORMATS: readonly PostFormat[] = ['image', 'carousel', 'reel', 'story'];
+export type AspectRatio = '1:1' | '4:5' | '9:16';
+export type FontId =
+  | 'Onest' | 'Manrope' | 'DM Sans' | 'Montserrat' | 'Bricolage Grotesque' | 'Unbounded' | 'Archivo'
+  | 'Fraunces' | 'Playfair Display' | 'Lora';
+export const FONTS: readonly FontId[] = ['Onest', 'Manrope', 'DM Sans', 'Montserrat', 'Bricolage Grotesque', 'Unbounded', 'Archivo', 'Fraunces', 'Playfair Display', 'Lora'];
+export type TemplateId = 'editorial' | 'bold' | 'photo' | 'quote' | 'list' | 'minimal' | 'split' | 'gradient';
+export const TEMPLATE_IDS: readonly TemplateId[] = ['editorial', 'bold', 'photo', 'quote', 'list', 'minimal', 'split', 'gradient'];
+
+export interface DesignSlide {
+  /** Malý nadtitulek, např. „NOVINKA“, „TIP #3“. */
+  kicker?: string;
+  /** Hlavní text, krátký (max ~70 znaků). */
+  headline: string;
+  /** Doplňující text (max ~160 znaků). */
+  body?: string;
+  /** Fotka nebo klip (data: nebo https:). */
+  mediaUrl?: string | null;
+}
+
+/** Návrh vizuálu postu: šablona + obsah slidů/scén. Vykresluje se v prohlížeči (náhled, export PNG/videa). */
+export interface DesignSpec {
+  format: PostFormat;
+  templateId: TemplateId;
+  /** image/carousel: 1:1 | 4:5; reel/story: 9:16 */
+  aspect: AspectRatio;
+  /** image: 1; carousel: 2–10; reel/story: 1–8 scén */
+  slides: DesignSlide[];
+  cta?: string;
+  /** reel/story: 6–60 s */
+  durationSec?: number;
+  music?: string | null;
+  /** Variabilita pozadí. */
+  seed: number;
+}
+
 export interface BrandProfile {
   /** Tón hlasu volným textem, např. „přátelský, věcný, bez superlativů“. */
   tone: string;
@@ -55,7 +92,16 @@ export interface BrandProfile {
   maxHashtags: number;
   languages: Language[];
   emoji: 'none' | 'few' | 'many';
+  /** Hlavní barva značky. */
   color: string;
+  secondaryColor: string;
+  accentColor: string;
+  logoUrl: string | null;
+  fontHeading: FontId;
+  fontBody: FontId;
+  /** Pilíře obsahu (témata, která se střídají), max 8. */
+  pillars: string[];
+  website: string | null;
 }
 
 export interface Brand {
@@ -118,6 +164,8 @@ export interface Post {
   overrides: Partial<Record<Network, string>>;
   networks: Network[];
   media: MediaRef[];
+  /** Návrh vizuálu (grafika, karusel, reel). null = jen text + nahraná média. */
+  design: DesignSpec | null;
   status: PostStatus;
   scheduledAt: IsoDate | null;
   publishedAt: IsoDate | null;
