@@ -2,7 +2,8 @@ import type { Backend, PublicApi } from '@ms/core';
 import { Check, Undo2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { PostPreview } from '../components/PostPreview';
+import { textForNetwork } from '@ms/core';
+import { PreviewSwitcher } from '../studio/preview';
 import { Avatar } from '../components/ui';
 import { errorMessage, fmtDateTime, relative } from '../lib/format';
 
@@ -77,7 +78,7 @@ export function PublicApproval({ backend }: { backend: Backend }) {
       )}
       <section className="card card-pad">
         <p className="small muted" style={{ marginBottom: 10 }}>Plánovaná publikace: <strong>{fmtDateTime(view.post.scheduledAt)}</strong></p>
-        <PostPreview brandName={view.brandName} brandColor={view.brandColor} title={view.post.title} body={view.post.body} overrides={view.post.overrides} networks={view.post.networks} scheduledAt={view.post.scheduledAt} media={view.post.media} />
+        <PreviewSwitcher brand={{ name: view.brandName, profile: view.brandProfile }} design={view.post.design} caption={view.post.body} captions={Object.fromEntries(view.post.networks.map((n) => [n, textForNetwork(view.post.body, view.post.overrides, n)]))} media={view.post.media} networks={view.post.networks} scheduledAt={view.post.scheduledAt} playing />
       </section>
       {view.comments.length > 0 && (
         <section className="card card-pad stack">

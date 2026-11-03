@@ -5,6 +5,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAmbient } from '../components/Ambient';
 import { CountUp, Empty, Loading, StatusBadge } from '../components/ui';
 import { useReveal } from '../lib/motion';
+import { DesignCanvas } from '../studio/render';
+import { DesignThumb } from '../studio/preview';
 import { useAction, useApi, useBrandFilter, useData, useSession } from '../lib/app';
 import { fmtDayShort, fmtInt, fmtNum, fmtPct, fmtTime, greeting, relative } from '../lib/format';
 import { useCatalog } from '../lib/hooks';
@@ -142,7 +144,9 @@ export function Stat({ icon, num, label, trend }: { icon: React.ReactNode; num: 
   );
 }
 
-export function Thumb({ post, brand, lg }: { post: Post; brand: { profile: { color: string } } | undefined; lg?: boolean }) {
+export function Thumb({ post, brand, lg }: { post: Post; brand: Brand | undefined; lg?: boolean }) {
+  const size = lg ? 64 : 46;
+  if (post.design && brand) return <DesignThumb design={post.design} media={post.media} brand={brand} size={size} rounded={12} />;
   const img = post.media[0];
   if (img) return <img className={`thumb ${lg ? 'lg' : ''}`} src={img.url} alt={img.alt || ''} loading="lazy" />;
   return <span className={`thumb ${lg ? 'lg' : ''}`} style={{ background: brand?.profile.color ?? 'var(--draft-soft)', opacity: 0.35 }} aria-hidden />;
@@ -167,7 +171,9 @@ function UpNext({ post, brand, now }: { post: Post; brand: Brand | undefined; no
   const tone = post.status === 'scheduled' ? 'st-scheduled' : post.status === 'in_review' ? 'st-in_review' : post.status === 'approved' ? 'st-approved' : 'st-changes_requested';
   return (
     <div className="upnext" role="link" tabIndex={0} onClick={() => nav(`/posty/${post.id}`)} onKeyDown={(e) => e.key === 'Enter' && nav(`/posty/${post.id}`)}>
-      {img ? <img src={img.url} alt={img.alt || ''} /> : <div style={{ background: brand?.profile.color ?? '#333' }} />}
+      {post.design && brand ? (
+        <div className="upnext-visual"><DesignCanvas design={post.design} brand={brand} playing={post.design.format === 'reel' || post.design.format === 'story'} /></div>
+      ) : img ? <img src={img.url} alt={img.alt || ''} /> : <div style={{ background: brand?.profile.color ?? '#333' }} />}
       <div className="body">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <span className="brand">

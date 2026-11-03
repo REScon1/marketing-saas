@@ -1,6 +1,6 @@
 import type { Backend } from '@ms/core';
 import {
-  BarChart3, Bell, Briefcase, CalendarDays, CheckCircle2, ChevronsLeft, ChevronsRight, Layers, LayoutDashboard, LogOut, Moon, Plus, Sun, Users, Waves,
+  BarChart3, Bell, Briefcase, CalendarDays, CheckCircle2, ChevronsLeft, ChevronsRight, Layers, Grid3x3, LayoutDashboard, LogOut, Moon, Plus, Sparkles, Sun, Users, Waves,
 } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
@@ -18,6 +18,8 @@ import { CalendarPage } from './pages/Calendar';
 import { Clients } from './pages/Clients';
 import { Dashboard } from './pages/Dashboard';
 import { PostEditor } from './pages/PostEditor';
+import { Studio } from './pages/Studio';
+import { Feed } from './pages/Feed';
 import { PublicApproval } from './pages/PublicApproval';
 import { Reports } from './pages/Reports';
 import { Team } from './pages/Team';
@@ -234,8 +236,10 @@ function ShellInner() {
 
   const tabs: NavItem[] = staff
     ? [
+        { to: '/studio', label: 'Studio' },
         { to: '/', label: 'Přehled', end: true },
         { to: '/kalendar', label: 'Kalendář' },
+        { to: '/feed', label: 'Mřížka' },
         { to: '/schvalovani', label: 'Schvalování', count: pendingCount },
         { to: '/reporty', label: 'Reporty' },
         { to: '/klienti', label: 'Klienti a značky' },
@@ -248,8 +252,10 @@ function ShellInner() {
 
   const dock: NavItem[] = staff
     ? [
+        { to: '/studio', label: 'Studio', icon: Sparkles },
         { to: '/', label: 'Přehled', icon: LayoutDashboard, end: true },
         { to: '/kalendar', label: 'Kalendář', icon: CalendarDays },
+        { to: '/feed', label: 'Mřížka profilu', icon: Grid3x3, hideMobile: true },
         { to: '/schvalovani', label: 'Schvalování', icon: CheckCircle2 },
         { to: '/reporty', label: 'Reporty', icon: BarChart3 },
         { to: '/klienti', label: 'Klienti a značky', icon: Briefcase, hideMobile: true },
@@ -313,6 +319,8 @@ function ShellInner() {
           <Routes>
             <Route path="/" element={staff ? <Dashboard /> : <Approvals />} />
             <Route path="/kalendar" element={<CalendarPage />} />
+            <Route path="/studio" element={staff ? <Studio /> : <Navigate to="/" />} />
+            <Route path="/feed" element={staff ? <Feed /> : <Navigate to="/" />} />
             <Route path="/schvalovani" element={<Approvals />} />
             <Route path="/posty/novy" element={staff ? <PostEditor /> : <Navigate to="/" />} />
             <Route path="/posty/:id" element={<PostEditor />} />
@@ -457,9 +465,9 @@ function Dock({ items, staff, go, theme, onLogout, demo }: { items: NavItem[]; s
         {!open && <span className="tip">Rozbalit</span>}
       </button>
       {staff && (
-        <button className="plus" onClick={() => nav('/posty/novy')} aria-label="Nový post">
-          <span className="di"><Plus size={20} /></span><span className="dl">Nový post</span>
-          {!open && <span className="tip">Nový post</span>}
+        <button className="plus" onClick={() => go('/studio')} aria-label="Vytvořit obsah">
+          <span className="di"><Plus size={20} /></span><span className="dl">Vytvořit obsah</span>
+          {!open && <span className="tip">Vytvořit obsah</span>}
         </button>
       )}
       <div className="dock-links-wrap">

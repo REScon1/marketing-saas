@@ -1,4 +1,7 @@
-import { NETWORKS, type Brand, type BrandProfile, type Client, type Network, type SocialAccount } from '@ms/core';
+import { FONTS, NETWORKS, type Brand, type BrandProfile, type Client, type DesignSpec, type FontId, type Network, type SocialAccount } from '@ms/core';
+import { DesignCanvas } from '../studio/render';
+
+const SAMPLE = (name: string): DesignSpec => ({ format: 'image', templateId: 'editorial', aspect: '4:5', seed: 3, slides: [{ kicker: 'UKÁZKA', headline: `Takhle vypadá ${name}`, body: 'Barvy, písma a logo z brand kitu.' }] });
 import { ArrowLeft, Plug, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useReveal } from '../lib/motion';
@@ -67,7 +70,7 @@ function BrandForm({ data }: { data: { brand: Brand; client: Client; accounts: S
                 <option value="none">Nepoužívat</option><option value="few">Střídmě</option><option value="many">Klidně více</option>
               </select>
             </Field>
-            <Field label="Barva"><input className="input" type="color" value={p.color} onChange={(e) => set('color', e.target.value)} style={{ height: 38, padding: 4 }} /></Field>
+            <Field label="Web"><input id="bk-web" className="input" value={p.website ?? ''} placeholder="https://" onChange={(e) => set('website', e.target.value || null)} /></Field>
           </div>
           <Field label="Ukázkové posty" hint="Oddělte prázdným řádkem se třemi pomlčkami (---). AI se z nich učí styl.">
             <textarea className="textarea" style={{ minHeight: 120 }} defaultValue={p.examples.join('\n---\n')} onBlur={(e) => set('examples', e.target.value.split(/\n-{3,}\n/).map((x) => x.trim()).filter(Boolean))} />
@@ -79,6 +82,48 @@ function BrandForm({ data }: { data: { brand: Brand; client: Client; accounts: S
         </section>
 
         <aside className="stack">
+          <section className="panel card-pad stack">
+            <h2>Brand kit</h2>
+            <p className="small muted">Ze stylu se skládají všechny šablony grafik, karuselů a videí.</p>
+            <div className="row" style={{ alignItems: 'flex-start', gap: 14 }}>
+              <label className="logo-drop" title="Nahrát logo (PNG/SVG, ideálně průhledné)">
+                {p.logoUrl ? <img src={p.logoUrl} alt="Logo" /> : <span className="small muted">Logo</span>}
+                <input id="bk-logo" type="file" accept="image/png,image/svg+xml,image/webp,image/jpeg" hidden onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  if (!f) return;
+                  if (f.size > 400_000) return;
+                  const url = await new Promise<string>((res) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.readAsDataURL(f); });
+                  set('logoUrl', url);
+                }} />
+              </label>
+              <div className="stack" style={{ gap: 8, flex: 1 }}>
+                <div className="row" style={{ gap: 6 }}>
+                  {(['color', 'secondaryColor', 'accentColor'] as const).map((k, i) => (
+                    <label key={k} className="swatch" title={['Hlavní', 'Doplňková', 'Akcent'][i]}>
+                      <input id={`bk-${k}`} type="color" value={p[k]} onChange={(e) => set(k, e.target.value)} />
+                      <span className="small muted">{['Hlavní', 'Doplňková', 'Akcent'][i]}</span>
+                    </label>
+                  ))}
+                </div>
+                {p.logoUrl && <button className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => set('logoUrl', null)}>Odebrat logo</button>}
+              </div>
+            </div>
+            <div className="grid cols-2" style={{ gap: 10 }}>
+              <Field label="Písmo nadpisů">
+                <select id="bk-fh" className="select" value={p.fontHeading} onChange={(e) => set('fontHeading', e.target.value as FontId)}>{FONTS.map((f) => <option key={f}>{f}</option>)}</select>
+              </Field>
+              <Field label="Písmo textu">
+                <select id="bk-fb" className="select" value={p.fontBody} onChange={(e) => set('fontBody', e.target.value as FontId)}>{FONTS.map((f) => <option key={f}>{f}</option>)}</select>
+              </Field>
+            </div>
+            <Field label="Pilíře obsahu" hint="Jeden na řádek. Autopilot je při plánování střídá.">
+              <textarea id="bk-pillars" className="textarea" style={{ minHeight: 80 }} defaultValue={p.pillars.join('\n')} onBlur={(e) => set('pillars', lines(e.target.value))} />
+            </Field>
+            <div className="bk-sample">
+              <DesignCanvas design={SAMPLE(brand.name)} brand={{ name, profile: p }} />
+              <DesignCanvas design={{ ...SAMPLE(brand.name), templateId: 'bold', seed: 7 }} brand={{ name, profile: p }} />
+            </div>
+          </section>
           <section className="card card-pad stack">
             <h2>Připojené účty</h2>
             <p className="small muted">V MVP přes službu pro publikaci na sítě (unified API). V demu je připojení simulované.</p>

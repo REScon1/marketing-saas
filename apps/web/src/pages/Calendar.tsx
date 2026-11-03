@@ -1,4 +1,5 @@
-import { NETWORKS, type Network, type Post, type PostStatus } from '@ms/core';
+import { NETWORKS, type Brand, type Network, type Post, type PostStatus } from '@ms/core';
+import { DesignThumb } from '../studio/preview';
 import { CalendarCheck2, CalendarX2, ChevronLeft, ChevronRight, Clock4, GripVertical, Hourglass, Plus, Send } from 'lucide-react';
 import { useLayoutEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { Flip, gsap, reduced, useReveal } from '../lib/motion';
@@ -219,7 +220,7 @@ export function CalendarPage() {
                       <div className="num"><span>{WEEKDAYS[i]} {Number(day.slice(8))}.</span>
                         {staff && day >= today && <button className="add" onClick={() => nav(`/posty/novy?den=${day}`)} aria-label={`Nový post na ${day}`}><Plus size={14} /></button>}
                       </div>
-                      {items.map((p) => <Block key={p.id} post={p} staff={staff} big onOpen={() => nav(`/posty/${p.id}`)} brandColor={brandById.get(p.brandId)?.profile.color} />)}
+                      {items.map((p) => <Block key={p.id} post={p} staff={staff} big onOpen={() => nav(`/posty/${p.id}`)} brandColor={brandById.get(p.brandId)?.profile.color} brand={brandById.get(p.brandId)} />)}
                     </div>
                   );
                 })}
@@ -283,14 +284,14 @@ export function CalendarPage() {
   );
 }
 
-function Block({ post: p, staff, big, onOpen, brandColor }: { post: Post; staff: boolean; big?: boolean; onOpen(): void; brandColor?: string }) {
+function Block({ post: p, staff, big, onOpen, brandColor, brand }: { post: Post; staff: boolean; big?: boolean; onOpen(): void; brandColor?: string; brand?: Brand }) {
   const draggable = staff && !['published', 'publishing'].includes(p.status);
   const at = p.publishedAt ?? p.scheduledAt!;
   return (
     <div className={`block b-${p.status} ${big ? 'big' : ''}`} data-flip-id={p.id} draggable={draggable} role="link" tabIndex={0}
       onDragStart={(e) => { e.dataTransfer.setData('text/plain', p.id); e.dataTransfer.effectAllowed = 'move'; }}
       onClick={onOpen} onKeyDown={(e) => e.key === 'Enter' && onOpen()} title={`${p.title} · ${STATUS_LABEL[p.status]}`}>
-      {big && p.media[0] && <img src={p.media[0].url} alt="" loading="lazy" />}
+      {big && brand && (p.design || p.media[0]) && <DesignThumb design={p.design} media={p.media} brand={brand} rounded={8} />}
       <span className="time"><span className="brand-dot" style={{ background: brandColor, width: 7, height: 7 }} />{fmtTime(at)}
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 3 }}>{p.networks.map((n) => <NetworkIcon key={n} network={n} size={10} />)}</span>
       </span>
@@ -300,7 +301,7 @@ function Block({ post: p, staff, big, onOpen, brandColor }: { post: Post; staff:
   );
 }
 
-function ListView({ days, byDay, brandById }: { days: string[]; byDay: Map<string, Post[]>; brandById: Map<string, { name: string; profile: { color: string } }> }) {
+function ListView({ days, byDay, brandById }: { days: string[]; byDay: Map<string, Post[]>; brandById: Map<string, Brand> }) {
   const nav = useNavigate();
   if (!days.length) return <Empty title="V tomto měsíci nic není" />;
   return (

@@ -1,6 +1,6 @@
 import {
   brandCheck, NETWORKS, NETWORK_LIMITS, textForNetwork,
-  type BrandIssue, type MediaRef, type Network, type PostDetail,
+  type BrandIssue, type DesignSpec, type MediaRef, type Network, type PostDetail,
 } from '@ms/core';
 import {
   AlertCircle, ArrowLeft, ImagePlus, X as XIcon, Check, Copy, ExternalLink, History, Link2, RotateCcw, Send, Sparkles, Undo2, Wand2, Zap,
@@ -8,7 +8,8 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAmbient } from '../components/Ambient';
-import { PostPreview } from '../components/PostPreview';
+import { DesignEditor } from '../studio/DesignEditor';
+import { PreviewSwitcher } from '../studio/preview';
 import { useReveal } from '../lib/motion';
 import { Avatar, BrandTag, ErrorBox, Field, Loading, Modal, NetworkIcon, StatusBadge } from '../components/ui';
 import { isStaffRole, useAction, useApi, useData, useSession, useToast } from '../lib/app';
@@ -35,6 +36,7 @@ interface Form {
   scheduledAt: string;
   aiAssisted: boolean;
   media: MediaRef[];
+  design: DesignSpec | null;
 }
 
 function Editor({ detail }: { detail: PostDetail | null }) {
@@ -52,13 +54,13 @@ function Editor({ detail }: { detail: PostDetail | null }) {
     if (post) {
       return {
         brandId: post.brandId, title: post.title, body: post.body, networks: post.networks, overrides: post.overrides,
-        scheduledAt: toLocalInput(post.scheduledAt), aiAssisted: post.aiAssisted, media: post.media,
+        scheduledAt: toLocalInput(post.scheduledAt), aiAssisted: post.aiAssisted, media: post.media, design: post.design ?? null,
       };
     }
     const day = params.get('den');
     return {
       brandId: params.get('znacka') ?? '', title: '', body: '', networks: [], overrides: {},
-      scheduledAt: day ? `${day}T10:00` : '', aiAssisted: false, media: [],
+      scheduledAt: day ? `${day}T10:00` : '', aiAssisted: false, media: [], design: null,
     };
   }, [post, params]);
 
@@ -82,7 +84,7 @@ function Editor({ detail }: { detail: PostDetail | null }) {
   const readOnly = !staff || locked;
   const issues: BrandIssue[] = brand ? brandCheck({ body: f.body, networks: f.networks, overrides: f.overrides }, brand.profile) : [];
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((x) => ({ ...x, [k]: v }));
-  const resetsApproval = !!post && ['in_review', 'approved', 'scheduled', 'failed'].includes(post.status) && (f.body !== initial.body || JSON.stringify(f.media) !== JSON.stringify(initial.media) || JSON.stringify(f.networks) !== JSON.stringify(initial.networks) || JSON.stringify(f.overrides) !== JSON.stringify(initial.overrides));
+  const resetsApproval = !!post && ['in_review', 'approved', 'scheduled', 'failed'].includes(post.status) && (f.body !== initial.body || JSON.stringify(f.media) !== JSON.stringify(initial.media) || JSON.stringify(f.design) !== JSON.stringify(initial.design) || JSON.stringify(f.networks) !== JSON.stringify(initial.networks) || JSON.stringify(f.overrides) !== JSON.stringify(initial.overrides));
 
   async function save(): Promise<string | undefined> {
     if (!f.brandId) {
@@ -91,7 +93,7 @@ function Editor({ detail }: { detail: PostDetail | null }) {
     }
     const payload = {
       title: f.title, body: f.body, networks: f.networks, overrides: f.overrides,
-      scheduledAt: fromLocalInput(f.scheduledAt), aiAssisted: f.aiAssisted, media: f.media,
+      scheduledAt: fromLocalInput(f.scheduledAt), aiAssisted: f.aiAssisted, media: f.media, design: f.design,
     };
     if (!post) {
       const created = await run(() => api.call('content.createPost', { brandId: f.brandId, ...payload }), 'Post uložen jako koncept');
@@ -198,13 +200,20 @@ function Editor({ detail }: { detail: PostDetail | null }) {
             {resetsApproval && <div className="alert warn small">Změna textu nebo sítí zruší dosavadní schválení. Post se vrátí do konceptu.</div>}
           </section>
 
+          {brand && (staff || f.design) && (
+            <DesignEditor design={f.design} readOnly={readOnly} brand={brand} media={f.media}
+              onChange={(d) => set('design', d)} title={f.title || 'Post'} />
+          )}
           {staff && !readOnly && brand && <AiPanel brandId={brand.id} networks={f.networks} body={f.body} onUse={(body) => setF((x) => ({ ...x, body, aiAssisted: true }))} />}
         </div>
 
         <aside className="stack">
           <section className="card card-pad">
             <h2 style={{ marginBottom: 12 }}>Náhled</h2>
-            {brand && <PostPreview brandName={brand.name} brandColor={brand.profile.color} title={f.title || 'Váš vizuál'} body={f.body} overrides={f.overrides} networks={f.networks} scheduledAt={fromLocalInput(f.scheduledAt)} media={f.media} />}
+            {brand && (f.networks.length ? (
+              <PreviewSwitcher brand={brand} design={f.design} captions={Object.fromEntries(f.networks.map((n) => [n, textForNetwork(f.body, f.overrides, n)]))}
+                caption={f.body} media={f.media} networks={f.networks} scheduledAt={fromLocalInput(f.scheduledAt)} playing />
+            ) : <div className="empty small">Vyberte síť, aby šel zobrazit náhled.</div>)}
           </section>
 
           {staff && linkUrl && (
