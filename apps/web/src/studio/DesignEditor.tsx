@@ -179,8 +179,9 @@ export function DesignEditor({ design, readOnly, brand, media, onChange, title }
           </>
         )}
         <span style={{ marginLeft: 'auto' }} className="row">
-          <button className="btn sm" disabled={!!exporting} onClick={() => void download('png')}><Download size={14} /> {exporting === 'png' ? 'Exportuji…' : `PNG (slide ${cur + 1})`}</button>
-          {video && <button className="btn sm" disabled={!!exporting} onClick={() => void download('video')}><Film size={14} /> {exporting === 'video' ? `Renderuji ${d.durationSec ?? 9} s…` : 'Stáhnout video'}</button>}
+          {__DEMO__ && <span className="small muted">Stažení funguje v nasazené aplikaci.</span>}
+          <button className="btn sm" disabled={!!exporting || __DEMO__} onClick={() => void download('png')}><Download size={14} /> {exporting === 'png' ? 'Exportuji…' : `PNG (slide ${cur + 1})`}</button>
+          {video && <button className="btn sm" disabled={!!exporting || __DEMO__} onClick={() => void download('video')}><Film size={14} /> {exporting === 'video' ? `Renderuji ${d.durationSec ?? 9} s…` : 'Stáhnout video'}</button>}
         </span>
       </div>
     </section>
