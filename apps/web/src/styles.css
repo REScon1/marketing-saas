@@ -218,7 +218,7 @@ p { margin: 0; }
 .me { display: flex; align-items: center; gap: 10px; background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 999px; padding: 4px 12px 4px 4px; box-shadow: var(--shadow); }
 .me .who { line-height: 1.15; }
 
-.content { width: 100%; max-width: 1440px; }
+.content { width: 100%; max-width: 1440px; margin-inline: auto; }
 .page-head { display: flex; align-items: flex-end; gap: 18px 28px; margin-bottom: 22px; flex-wrap: wrap; }
 .page-head h1 { white-space: pre-line; }
 .page-head .sub { color: var(--muted); margin-top: 6px; }
